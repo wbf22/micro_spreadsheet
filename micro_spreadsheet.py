@@ -10,7 +10,7 @@ Features
 - math with references to other cells
 
 '''
-
+ANSII_RESET = "\033[0m"
 
 def convert_cell_name_to_x_y(name: str) -> tuple[int, int]:
     col = []
@@ -75,7 +75,6 @@ def substitute_if_ref(value: str) -> tuple[bool, str]:
 
     return False, float_value
 
-
 def wrap(width: int, str: str) -> str:
     words = str.split(' ')
     wrapped_str = []
@@ -102,6 +101,49 @@ def wrap(width: int, str: str) -> str:
     
     return wrapped_str
 
+def prnt(str: str):
+    print(str, end='')
+
+def print_in_color(str: str, rgb_color_code: str):
+    print(rgb_color_code, end='')
+    print(str, end='')
+    print(ANSII_RESET, end='')
+
+def print_cadet_grey(str: str):
+    # rgb(154, 160, 168)
+    # rgb(35, 36, 38)
+    print_in_color(str, '\033[38;2;35;36;38m')
+def print_ash_grey(str: str):
+    # rgb(167, 196, 181)
+    print_in_color(str, '\033[38;2;167;196;181m')
+def print_celadon(str: str):
+    # rgb(169, 216, 184)
+    print_in_color(str, '\033[38;2;169;216;184m')
+def print_tea_green(str: str):
+    # rgb(190, 255, 199)
+    print_in_color(str, '\033[38;2;190;255;199m')
+def print_reseda_green(str: str):
+    # rgb(114, 112, 91)
+    print_in_color(str, '\033[38;2;114;112;91m')
+
+def mint_green(str: str):
+    # 218, 255, 237
+    print_in_color(str, '\033[38;2;218;255;237m')
+def ice_blue(str: str):
+    # 155, 243, 240
+    print_in_color(str, '\033[38;2;155;243;240m')
+def tekhelet(str: str):
+    # 71, 49, 152
+    print_in_color(str, '\033[38;2;71;49;152m')
+def indigo(str: str):
+    # 74, 13, 103
+    print_in_color(str, '\033[38;2;74;13;103m')
+def light_green(str: str):
+    # 173, 252, 146
+    print_in_color(str, '\033[38;2;173;252;146m')
+
+
+
 
 
 
@@ -114,7 +156,7 @@ FILE = args.file
 
 
 
-# read if provided file
+# READ if provided file
 csv_str = ''
 if (FILE != None and FILE != ''):
     with open(FILE, 'r') as file:
@@ -122,7 +164,7 @@ if (FILE != None and FILE != ''):
 
 
 
-# parse csv
+# PARSE CSV
 cells=[]
 lines = csv_str.split('\n')
 for i, line in enumerate(lines):
@@ -130,10 +172,13 @@ for i, line in enumerate(lines):
         line_cells = line.split(',')
         cells.append(line_cells)
 
-print(cells)
+width = len(cells[0])
+for row in cells:
+    if len(row) > width: width = len(row)
+height = len(cells)
 
 
-# parse meta data
+# PARSE META DATA
 equation_targets = {}
 equations = []
 for i, line in enumerate(lines):
@@ -145,7 +190,7 @@ for i, line in enumerate(lines):
         equation_targets[target] = None
 
 
-# apply equations
+# APPLY EQUATIONS
 operators = {'+', '-', '/', '*', '//', '**'}
 i = 0
 unresolved_equations = equations[:]
@@ -199,54 +244,55 @@ while last_size > len(unresolved_equations):
             x, y = convert_cell_name_to_x_y(target)
             while y >= len(cells):
                 cells.append([])
+            height = len(cells)
             while x >= len(cells[y]):
                 cells[y].append('')
+            width = max(width, x)
             cells[y][x] = str(resolution)
         else:
             current_unresolved_equations.append(target, equation)
 
     unresolved_equations = current_unresolved_equations
 
+# add missing cells
+for y in range(len(cells)):
+    while len(cells[y]) < width:
+        cells[y].append('')
+
 
 
 # DISPLAY 
 wrap_mode = 'extend' # extend, wrap, truncate
-width = len(cells[0])
-for row in cells:
-    if len(row) > width: width = len(row)
 
-height = len(cells)
-
-
-cell_width = 2
-cell_height = 1
+column_widths = {i: 4 for i in range(width)}
+row_heights = {i: 1 for i in range(height)}
 if wrap_mode == 'extend':
     for row in cells:
-        for value in row:
+        for x, value in enumerate(row):
             val_len = len(str(value)) if value != None else len(str('Error'))
-            if val_len > cell_width:
-                cell_width = val_len
+            if val_len > column_widths[x]:
+                column_widths[x] = val_len
             
 elif wrap_mode == 'wrap':
-    for row in cells:
+    for y, row in enumerate(cells):
         for value in row:
             val_lines = len(wrap(width, value).split('\n'))
-            if val_lines > cell_height:
-                cell_height = val_lines
-
-elif wrap_mode == 'truncate':
-    cell_width = 4
+            if val_lines > row_heights[y]:
+                row_heights[y] = val_lines
 
 
 # column labels
 row_label_space = len(str(height))
-print(' ' * (row_label_space+2), end='|')
+print_cadet_grey(' ' * (row_label_space+2) + '|')
 for i in range(width):
     alpha_value = convert_x_to_alpha_value(i)
-    print(" ", end="")
-    print(alpha_value[:cell_width], end="")
-    print(" " * (cell_width - len(alpha_value)), end="")
-    print(" |", end="")
+    spaces = column_widths[i] - len(alpha_value)
+    first_spaces = spaces // 2 + 1
+    second_spaces = spaces - first_spaces + 2
+    prnt(" " * first_spaces)
+    light_green(alpha_value[:column_widths[i]])
+    prnt(" " * second_spaces)
+    print_cadet_grey("|")
 print()
 
 
@@ -254,14 +300,14 @@ print()
 for i, row in enumerate(cells):
 
     
-    for cell_h in range(cell_height):
+    for cell_h in range(row_heights[i]):
         # row label
         print(' ', end='')
         row_num_str = str(i)
-        if cell_h == 0: print(row_num_str, end='')
+        if cell_h == 0: indigo(row_num_str)
         else: print(' ' * len(row_num_str), end='')
         print(' ' * (row_label_space - len(row_num_str)), end='')
-        print(' |', end='')
+        print_cadet_grey(' |')
 
         # cells
         for r, value in enumerate(row):
@@ -273,6 +319,7 @@ for i, row in enumerate(cells):
 
             print(' ', end='')
 
+            cell_width = column_widths[r]
             try:
                 float(cur_line)
                 print(' ' * (cell_width - len(cur_line)), end='')
@@ -281,7 +328,7 @@ for i, row in enumerate(cells):
                 print(cur_line, end='')
                 print(' ' * (cell_width - len(cur_line)), end='')
 
-            print(' |', end='')
+            print_cadet_grey(' |')
 
         print()
 

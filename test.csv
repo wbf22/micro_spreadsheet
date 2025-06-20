@@ -1,3 +1,4 @@
-dogs,cats
+dogs and bats,cats
 11,3
-<meta> a2=a1*10
+<meta> a2=a1*b1
+<meta> b2=a1*b1+77
