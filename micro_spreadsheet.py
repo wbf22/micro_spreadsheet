@@ -11,6 +11,8 @@ Features
 
 '''
 ANSII_RESET = "\033[0m"
+operators = {'+', '-', '/', '*', '//', '**'}
+
 
 def convert_cell_name_to_x_y(name: str) -> tuple[int, int]:
     col = []
@@ -39,7 +41,6 @@ def convert_cell_name_to_x_y(name: str) -> tuple[int, int]:
 
     return x, y
 
-
 def convert_x_to_alpha_value(x: int):
     power = 1
     while 26**power < x:
@@ -53,6 +54,7 @@ def convert_x_to_alpha_value(x: int):
         alpha_value.append(alpha_char)
     
     return ''.join(alpha_value)
+
 
 def substitute_if_ref(value: str) -> tuple[bool, str]:
 
@@ -74,6 +76,7 @@ def substitute_if_ref(value: str) -> tuple[bool, str]:
                     float_value = 0
 
     return False, float_value
+
 
 def wrap(width: int, str: str) -> str:
     words = str.split(' ')
@@ -97,9 +100,11 @@ def wrap(width: int, str: str) -> str:
         else:
             wrapped_str.append(' ')
             wrapped_str.append(word)
-            line_length += len(word)
+            line_length += len(word) + 1
     
-    return wrapped_str
+    return ''.join(wrapped_str)
+
+
 
 def prnt(str: str):
     print(str, end='')
@@ -145,8 +150,6 @@ def light_green(str: str):
 
 
 
-
-
 # define arguments
 parser = argparse.ArgumentParser(description="A terminal app for editing csv's or making spreadsheets")
 parser.add_argument('-f', '--file', required=True, help='path to your csv or spreadsheet file. otherwise a new file is opened')
@@ -180,159 +183,192 @@ height = len(cells)
 
 # PARSE META DATA
 equation_targets = {}
-equations = []
+equations = {}
 for i, line in enumerate(lines):
     if line.startswith('<meta>'):
         equation = line.split('<meta>')[1]
         equation = equation.replace(' ', '')
         target, equation = equation.split('=')
-        equations.append([target, equation])
+        equations[target] = equation
         equation_targets[target] = None
 
 
-# APPLY EQUATIONS
-operators = {'+', '-', '/', '*', '//', '**'}
-i = 0
-unresolved_equations = equations[:]
-last_size = len(unresolved_equations) + 1
-while last_size > len(unresolved_equations):
-    last_size = len(unresolved_equations)
-    current_unresolved_equations = []
-    for target, equation in unresolved_equations:
+def set_cell(cells: list[list[str]], x: int, y: int, value: str):
+    global width, height
 
+    while y >= len(cells):
+        cells.append([])
+    height = len(cells)
+    while x >= len(cells[y]):
+        cells[y].append('')
+    width = max(width, x+1)
+    cells[y][x] = str(value)
 
-        # expression = "2 + 3 * (4 - 1)"
-        # try:
-        #     result = eval(expression)
-        #     print(result)
-        # except SyntaxError as e:
-        #     print("SyntaxError:", e)
-        # except Exception as e:
-        #     print("Error:", e)
+def APPLY_EQUATIONS(cells: list[list[str]], equations: dict[str, str]):
+    global width, height, operators
 
-        
-        failed_to_subsitute = False
-        substituted_equation = []
-        last = 0
-        for i, c in enumerate(equation):
-            if c in operators:
-                last_is_op = False if i-1 == 0 else equation[i-1] in operators
-                if not last_is_op:
-                    value = equation[last:i]
-                    failed_to_subsitute, float_value = substitute_if_ref(value)
-                    if failed_to_subsitute: break
-                    substituted_equation.append(str(float_value))
+    i = 0
+    unresolved_equations = equations.copy()
+    last_size = len(unresolved_equations) + 1
+    while last_size > len(unresolved_equations):
+        last_size = len(unresolved_equations)
+        current_unresolved_equations = {}
+        for target, equation in unresolved_equations.items():
+
+            failed_to_subsitute = False
+            substituted_equation = []
+            last = 0
+            for i, c in enumerate(equation):
+                if c in operators:
+                    last_is_op = False if i-1 == 0 else equation[i-1] in operators
+                    if not last_is_op:
+                        value = equation[last:i]
+                        failed_to_subsitute, float_value = substitute_if_ref(value)
+                        if failed_to_subsitute: break
+                        substituted_equation.append(str(float_value))
+                    
+
+                    substituted_equation.append(c)
+                    last = i + 1
+            if not failed_to_subsitute:
+                value = equation[last:]
+                failed_to_subsitute, float_value = substitute_if_ref(value)
+                substituted_equation.append(str(float_value))
                 
 
-                substituted_equation.append(c)
-                last = i + 1
-        if not failed_to_subsitute:
-            value = equation[last:]
-            failed_to_subsitute, float_value = substitute_if_ref(value)
-            substituted_equation.append(str(float_value))
-            
+            resolution = 0.0
+            if not failed_to_subsitute:
+                substituted_equation = ''.join(substituted_equation)
+                try:
+                    resolution = eval(substituted_equation)
+                except Exception as e:
+                    # nothing
+                    resolution = None
+                equation_targets[target] = resolution
+                x, y = convert_cell_name_to_x_y(target)
+                set_cell(cells, x, y, resolution)
+            else:
+                current_unresolved_equations[target] = equation
 
-        resolution = 0.0
-        if not failed_to_subsitute:
-            substituted_equation = ''.join(substituted_equation)
-            try:
-                resolution = eval(substituted_equation)
-            except Exception as e:
-                # nothing
-                resolution = None
-            equation_targets[target] = resolution
-            x, y = convert_cell_name_to_x_y(target)
-            while y >= len(cells):
-                cells.append([])
-            height = len(cells)
-            while x >= len(cells[y]):
-                cells[y].append('')
-            width = max(width, x)
-            cells[y][x] = str(resolution)
-        else:
-            current_unresolved_equations.append(target, equation)
+        unresolved_equations = current_unresolved_equations
 
-    unresolved_equations = current_unresolved_equations
+    # add missing cells
+    for y in range(len(cells)):
+        while len(cells[y]) < width:
+            cells[y].append('')
 
-# add missing cells
-for y in range(len(cells)):
-    while len(cells[y]) < width:
-        cells[y].append('')
+def DISPLAY(cells: list[list[str]]):
+    global width, height
+    wrap_mode = 'extend' # extend, wrap, truncate
 
+    column_widths = {i: 4 for i in range(width)}
+    row_heights = {i: 1 for i in range(height)}
+    if wrap_mode == 'extend':
+        for row in cells:
+            for x, value in enumerate(row):
+                val_len = len(str(value)) if value != None else len(str('Error'))
+                if val_len > column_widths[x]:
+                    column_widths[x] = val_len
+                
+    elif wrap_mode == 'wrap':
+        for y, row in enumerate(cells):
+            for x, value in enumerate(row):
+                column_widths[x] = 10
+                val_lines = len(wrap(10, value).split('\n'))
+                if val_lines > row_heights[y]:
+                    row_heights[y] = val_lines
 
+    elif wrap_mode == 'truncate':
+        column_widths = {i: 10 for i in range(width)}
 
-# DISPLAY 
-wrap_mode = 'extend' # extend, wrap, truncate
-
-column_widths = {i: 4 for i in range(width)}
-row_heights = {i: 1 for i in range(height)}
-if wrap_mode == 'extend':
-    for row in cells:
-        for x, value in enumerate(row):
-            val_len = len(str(value)) if value != None else len(str('Error'))
-            if val_len > column_widths[x]:
-                column_widths[x] = val_len
-            
-elif wrap_mode == 'wrap':
-    for y, row in enumerate(cells):
-        for value in row:
-            val_lines = len(wrap(width, value).split('\n'))
-            if val_lines > row_heights[y]:
-                row_heights[y] = val_lines
-
-
-# column labels
-row_label_space = len(str(height))
-print_cadet_grey(' ' * (row_label_space+2) + '|')
-for i in range(width):
-    alpha_value = convert_x_to_alpha_value(i)
-    spaces = column_widths[i] - len(alpha_value)
-    first_spaces = spaces // 2 + 1
-    second_spaces = spaces - first_spaces + 2
-    prnt(" " * first_spaces)
-    light_green(alpha_value[:column_widths[i]])
-    prnt(" " * second_spaces)
-    print_cadet_grey("|")
-print()
+    # column labels
+    row_label_space = len(str(height))
+    print_cadet_grey(' ' * (row_label_space+2) + '|')
+    for i in range(width):
+        alpha_value = convert_x_to_alpha_value(i)
+        spaces = column_widths[i] - len(alpha_value)
+        first_spaces = spaces // 2 + 1
+        second_spaces = spaces - first_spaces + 2
+        prnt(" " * first_spaces)
+        light_green(alpha_value[:column_widths[i]])
+        prnt(" " * second_spaces)
+        print_cadet_grey("|")
+    print()
 
 
-# rows
-for i, row in enumerate(cells):
+    # rows
+    for i, row in enumerate(cells):
 
-    
-    for cell_h in range(row_heights[i]):
-        # row label
-        print(' ', end='')
-        row_num_str = str(i)
-        if cell_h == 0: indigo(row_num_str)
-        else: print(' ' * len(row_num_str), end='')
-        print(' ' * (row_label_space - len(row_num_str)), end='')
-        print_cadet_grey(' |')
-
-        # cells
-        for r, value in enumerate(row):
-            cur_line = ''
-            if value != None:
-                lines = value.split('\n')
-                cur_line = lines[cell_h]
-            else: cur_line = 'Error'
-
+        
+        for cell_h in range(row_heights[i]):
+            # row label
             print(' ', end='')
-
-            cell_width = column_widths[r]
-            try:
-                float(cur_line)
-                print(' ' * (cell_width - len(cur_line)), end='')
-                print(cur_line, end='')
-            except ValueError:
-                print(cur_line, end='')
-                print(' ' * (cell_width - len(cur_line)), end='')
-
+            row_num_str = str(i)
+            if cell_h == 0: indigo(row_num_str)
+            else: print(' ' * len(row_num_str), end='')
+            print(' ' * (row_label_space - len(row_num_str)), end='')
             print_cadet_grey(' |')
 
-        print()
+            # cells
+            for r, value in enumerate(row):
+                cell_width = column_widths[r]
+                cur_line = ''
+                if value != None:
+                    lines = []
+                    if wrap_mode == 'wrap':
+                        lines = wrap(cell_width, value).split('\n')
+                    else:
+                        lines = value.split('\n')
+                    cur_line = '' if cell_h >= len(lines) else lines[cell_h]
+                else: cur_line = 'Error'
+
+                print(' ', end='')
+
+                try:
+                    float(cur_line)
+                    print(' ' * (cell_width - len(cur_line)), end='')
+                    line = str(cur_line)
+                    print(line[:cell_width], end='')
+                except ValueError:
+                    print(cur_line[:cell_width], end='')
+                    print(' ' * (cell_width - len(cur_line)), end='')
+
+                print_cadet_grey(' |')
+
+            print()
 
 
+# do equations and diaply csv
+APPLY_EQUATIONS(cells, equations)
+DISPLAY(cells)
+
+
+# loop
+while True:
+    mint_green('enter cell to modify: ')
+    cell_name = input()
+
+    mint_green('current contents: ')
+    x, y = convert_cell_name_to_x_y(cell_name)
+    if cell_name in equation_targets:
+        tekhelet('=' + equations[cell_name])
+    elif y < len(cells) and x < len(cells[y]):
+        tekhelet(cells[y][x])
+    else:
+        tekhelet('')
+    print()
+
+    mint_green('enter equation or value: ')
+    value = input()
+
+    if value.startswith('='):
+        equations[cell_name] = value[1:]
+        equation_targets[cell_name] = None
+    else:
+        set_cell(cells, x, y, value)
+
+    APPLY_EQUATIONS(cells, equations)
+    DISPLAY(cells)
 
 
 
