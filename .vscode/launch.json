@@ -10,7 +10,9 @@
             "request": "launch",
             "program": "micro_spreadsheet.py",
             "console": "integratedTerminal",
-            "args": "-f test.csv"
+            // "args": "-f test.csv"
+            "args": "-f test.csv -nc"
+            // "args": "-h"
         }
     ]
 }
