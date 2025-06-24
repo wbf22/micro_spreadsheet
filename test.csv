@@ -1,5 +1,7 @@
 dogs and bats,cats
 11,3
 33.0,110.0
+,this is a super long string
 <meta> a2=a1*b1
 <meta> b2=a1*b1+77
+<meta> a3=avg(a1:a2)

@@ -184,7 +184,9 @@ def tokenize_equation(equation: str) -> list[str]:
                 tokens.append(value)
             tokens.append(c)
             last = i + 1
-    tokens.append(equation[last:])
+
+    if last != len(equation):
+        tokens.append(equation[last:])
 
     return tokens
 
@@ -213,6 +215,18 @@ def is_cell_range(str: str) -> bool:
      regex = r'^[a-zA-Z]+\d+:[a-zA-Z]+\d+$'
      return re.search(regex, str)
 
+def convert_cell_range_to_targets(cell_range: str) -> list[tuple[int, int]]:
+    cell_names = cell_range.split(':')
+    startx, starty = convert_cell_name_to_x_y(cell_names[0])
+    endx, endy = convert_cell_name_to_x_y(cell_names[1])
+
+    target_cells = []
+    for x in range(startx, endx+1):
+        for y in range(starty, endy+1):
+            target_cells.append([x, y])
+    
+    return target_cells
+
 
 # define arguments
 parser = argparse.ArgumentParser(description="A terminal app for editing csv's or making spreadsheets")
@@ -228,6 +242,7 @@ cells=[]
 width=1
 height=1
 equations = {}
+wrapped_cell_names = set()
 
 actions = []
 undone_actions = []
@@ -309,7 +324,7 @@ def modify_equation(source_cell_name: str, source_x: int, source_y: int, target_
             float(token)
         except ValueError:
             # find equivalent cell
-            if token not in operators:
+            if token not in operators and token not in functions:
                 other_x, other_y = convert_cell_name_to_x_y(token)
                 offset_x = other_x - source_x
                 offset_y = other_y - source_y
@@ -379,7 +394,7 @@ def TRIM_CELLS():
         height = 1
 
 def APPLY_EQUATIONS():
-    global cells, equations, width, height, operators
+    global cells, equations, width, height, operators, functions
 
     equation_targets = {}
     unresolved_equations = equations.copy()
@@ -393,14 +408,35 @@ def APPLY_EQUATIONS():
             tokens = tokenize_equation(equation)
 
             substituted_equation = []
-            
-            for token in tokens:
+            # a3=sum(a1:a2)
+            i = 0
+            while i < len(tokens):
+                token = tokens[i]
                 if token not in operators:
-                    failed_to_subsitute, float_value = substitute_if_ref(token, equation_targets)
-                    if failed_to_subsitute: break
-                    substituted_equation.append(str(float_value))
+                    if token in functions:
+                        cell_range = tokens[i+2] + tokens[i+3] + tokens[i+4]
+                        target_cells = convert_cell_range_to_targets(cell_range)
+                        target_cell_names = [convert_x_to_alpha_value(x) + str(y) for x, y in target_cells]
+
+                        new_tokens = tokens[:i]
+                        new_tokens.append('(')
+                        for target_cell_name in target_cell_names:
+                            new_tokens.append(target_cell_name)
+                            new_tokens.append("+")
+                        new_tokens[-1] = ')'
+                        if token == 'avg': 
+                            new_tokens.append('/')
+                            new_tokens.append(str(len(target_cell_names)))
+                        if i+6 < len(tokens): new_tokens.append(token[i+6:])
+                        tokens = new_tokens
+                        i-=1
+                    else:
+                        failed_to_subsitute, float_value = substitute_if_ref(token, equation_targets)
+                        if failed_to_subsitute: break
+                        substituted_equation.append(str(float_value))
                 else:
                     substituted_equation.append(token)
+                i+=1
 
             resolution = 0.0
             if not failed_to_subsitute:
@@ -430,13 +466,26 @@ def DISPLAY(show_equations=False):
     print("\033[2J\033[H")
 
     # determine wrap properties
-    wrap_mode = 'extend' # extend, wrap, truncate
 
     column_widths = {i: 4 for i in range(width)}
     row_heights = {i: 1 for i in range(height)}
-    if wrap_mode == 'extend':
-        for y, row in enumerate(cells):
-            for x, value in enumerate(row):
+
+    for cell_name in wrapped_cell_names:
+        x, y = convert_cell_name_to_x_y(cell_name)
+        value = get_cell(cells, x, y)
+        if show_equations:
+            equation = get_equation(x, y)
+            if equation != None: value = equation
+
+        column_widths[x] = 10
+        val_lines = len(wrap(10, value).split('\n'))
+        if val_lines > row_heights[y]:
+            row_heights[y] = val_lines
+
+    for y, row in enumerate(cells):
+        for x, value in enumerate(row):
+            cell_name = convert_x_to_alpha_value(x) + str(y)
+            if cell_name not in wrapped_cell_names:
                 if show_equations:
                     equation = get_equation(x, y)
                     if equation != None: value = equation
@@ -444,19 +493,6 @@ def DISPLAY(show_equations=False):
                 if val_len > column_widths[x]:
                     column_widths[x] = val_len
                 
-    elif wrap_mode == 'wrap':
-        for y, row in enumerate(cells):
-            for x, value in enumerate(row):
-                if show_equations:
-                    equation = get_equation(x, y)
-                    if equation != None: value = equation
-                column_widths[x] = 10
-                val_lines = len(wrap(10, value).split('\n'))
-                if val_lines > row_heights[y]:
-                    row_heights[y] = val_lines
-
-    elif wrap_mode == 'truncate':
-        column_widths = {i: 10 for i in range(width)}
 
     # column labels
     display = []
@@ -497,7 +533,8 @@ def DISPLAY(show_equations=False):
                 cur_line = ''
                 if value != None:
                     lines = []
-                    if wrap_mode == 'wrap':
+                    cell_name = convert_x_to_alpha_value(x) + str(y)
+                    if cell_name in wrapped_cell_names:
                         lines = wrap(cell_width, value).split('\n')
                     else:
                         lines = value.split('\n')
@@ -558,18 +595,19 @@ def SAVE():
     file.close()
 
 def WRITE_ACTION_FOR_UNDO():
-    global cells, width, height, equations
+    global cells, width, height, equations, wrapped_cell_names
     actions.append({
         'cells': copy.deepcopy(cells),
         'width': width,
         'height': height,
-        'equations': copy.deepcopy(equations)
+        'equations': copy.deepcopy(equations),
+        'wrapped_cell_names': copy.deepcopy(wrapped_cell_names)
     })
 
     undone_actions.clear()
 
 def UNDO():
-    global cells, width, height, equations
+    global cells, width, height, equations, wrapped_cell_names
 
     if len(actions) == 0: return
 
@@ -581,7 +619,8 @@ def UNDO():
         'cells': copy.deepcopy(cells),
         'width': width,
         'height': height,
-        'equations': copy.deepcopy(equations)
+        'equations': copy.deepcopy(equations),
+        'wrapped_cell_names': copy.deepcopy(wrapped_cell_names)
     })
 
     # reset to last state
@@ -589,9 +628,10 @@ def UNDO():
     width = last_state['width']
     height = last_state['height']
     equations = copy.deepcopy(last_state['equations'])
+    wrapped_cell_names = copy.deepcopy(last_state['wrapped_cell_names'])
 
 def REDO():
-    global cells, width, height, equations
+    global cells, width, height, equations, wrapped_cell_names
     if len(undone_actions) == 0: return
 
     # pop undone state
@@ -602,7 +642,8 @@ def REDO():
         'cells': copy.deepcopy(cells),
         'width': width,
         'height': height,
-        'equations': copy.deepcopy(equations)
+        'equations': copy.deepcopy(equations),
+        'wrapped_cell_names': copy.deepcopy(wrapped_cell_names)
     })
 
     # reset to undone state
@@ -610,6 +651,7 @@ def REDO():
     width = previous_state['width']
     height = previous_state['height']
     equations = copy.deepcopy(previous_state['equations'])
+    wrapped_cell_names = copy.deepcopy(previous_state['wrapped_cell_names'])
 
 def COPY(cell_names: list[str]):
     global cells, equations, operators
@@ -621,12 +663,7 @@ def COPY(cell_names: list[str]):
 
     source_cells = []
     if ':' in cell_name:
-        start_name, end_name = cell_name.split(':')
-        startx, starty = convert_cell_name_to_x_y(start_name)
-        endx, endy = convert_cell_name_to_x_y(end_name)
-        for x in range(startx, endx+1):
-            for y in range(starty, endy+1):
-                source_cells.append([x, y])
+        source_cells = convert_cell_range_to_targets(cell_name)
     else:
         x, y = convert_cell_name_to_x_y(cell_name)
         source_cells.append([x, y])
@@ -691,6 +728,9 @@ while True:
                 ice_blue('h') + tekhelet(' - show commands')
             )
             print(
+                ice_blue('w') + tekhelet(' - toogle wrap/extend on a cell')
+            )
+            print(
                 ice_blue('l') + tekhelet(' - load file')
             )
             print(
@@ -738,6 +778,26 @@ while True:
             REDO()
         elif command == 'h':
             show_instructions = True
+        elif command.startswith("w "):
+            cell_name = command[2:]
+            target_cells = []
+
+            WRITE_ACTION_FOR_UNDO()
+            if is_cell_range(cell_name):
+                target_cells = convert_cell_range_to_targets(cell_name)
+            else:
+                x, y = convert_cell_name_to_x_y(cell_name)
+                target_cells.append([x, y])
+
+            for x, y in target_cells:
+                cell_name = convert_x_to_alpha_value(x) + str(y)
+                if cell_name in wrapped_cell_names:
+                    wrapped_cell_names.remove(cell_name)
+                else: 
+                    wrapped_cell_names.add(cell_name)
+
+            reprint = True
+            
         elif command == 'l':
             pass
         elif command == 's':
@@ -755,15 +815,8 @@ while True:
 
             # get input cell(s)
             target_cells = []
-            is_range = ':' in cell_name
-            if is_range:
-                cell_names = cell_name.split(':')
-                startx, starty = convert_cell_name_to_x_y(cell_names[0])
-                endx, endy = convert_cell_name_to_x_y(cell_names[1])
-
-                for x in range(startx, endx+1):
-                    for y in range(starty, endy+1):
-                        target_cells.append([x, y])
+            if ':' in cell_name:
+                target_cells = convert_cell_range_to_targets(cell_name)
             else:
                 x, y = convert_cell_name_to_x_y(cell_name)
                 target_cells.append([x, y])
@@ -771,8 +824,8 @@ while True:
             # set cells
             for x, y in target_cells:
                 target_cell_name = convert_x_to_alpha_value(x) + str(y)
-                if is_equation(value):
-                    equations[target_cell_name] = value
+                if is_equation(value.replace(" ", "")):
+                    equations[target_cell_name] = value.replace(" ", "")
                 else:
                     if target_cell_name in equations: del equations[target_cell_name]
                     set_cell(cells, x, y, value)
