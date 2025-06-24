@@ -13,7 +13,8 @@ Features
 
 '''
 ANSII_RESET = "\033[0m"
-operators = {'+', '-', '/', '*', '//', '**'}
+operators = {'+', '-', '/', '*', '//', '**', '(', ')', ':'}
+functions = {'sum', 'avg'}
 
 
 def convert_cell_name_to_x_y(name: str) -> tuple[int, int]:
@@ -36,26 +37,24 @@ def convert_cell_name_to_x_y(name: str) -> tuple[int, int]:
     y = int(row)
     x = 0
     for i, c in enumerate(col):
-        order = ord(c) - ord('a')
+        order = ord(c) - ord('a') + 1
         power = len(col) - 1 - i
         x += 26**power * order
-
+    x -= 1
 
     return x, y
 
 def convert_x_to_alpha_value(x: int):
-    power = 1
-    while 26**power < x:
-        power += 1
-    power -= 1
-
-    alpha_value = []
-    for i in range(power + 1):
-        order = x // (26**(power-i))
-        alpha_char = chr(ord('a') + order)
-        alpha_value.append(alpha_char)
+    result = []
+    x+=1
     
-    return ''.join(alpha_value)
+    while x > 0:
+        x -= 1  # Decrement x to make the sequence zero-based
+        remainder = x % 26
+        result.append(chr(ord('a') + remainder))
+        x //= 26
+    
+    return ''.join(reversed(result))
 
 
 def substitute_if_ref(value: str, equation_targets: {str, float}) -> tuple[bool, str]:
@@ -150,12 +149,29 @@ def light_green(str: str) -> str:
     # 173, 252, 146
     return print_in_color(str, '\033[38;2;173;252;146m')
 
+def grey_gradient(i:int, str: str) -> str:
+    mod = i % 2
+    if mod == 0:
+        return print_in_color(str, '\033[38;2;250;250;250m')
+    elif mod == 1:
+        return print_in_color(str, '\033[38;2;220;220;220m')
+def black(str: str) -> str:
+    # return print_in_color(str, '\033[38;2;0;0;0m')
+    return print_in_color(str, '\033[2m')
+
+
+
 def get_float_precision(f):
     s = str(f)
     if '.' in s:
         return len(s.split('.')[1])
     else:
         return 0
+
+def is_cell_name(str: str) -> bool:
+    cell_name_regex = r'^[a-zA-Z]+\d+$'  # start, 1 or more alpha, 1 or more digit, finish
+    return re.search(cell_name_regex, str)
+
 
 def tokenize_equation(equation: str) -> list[str]:
     last = 0
@@ -173,18 +189,29 @@ def tokenize_equation(equation: str) -> list[str]:
     return tokens
 
 def is_equation(str: str) -> bool:
-    global operators
+    global operators, functions
 
-    # split by operators
-    tokens = tokenize_equation(str)
-    regex = r'^[a-zA-Z]*\d+$'  # start, 0 or more alpha, 1 or more digit
-    for token in tokens:
-        if token not in operators and not re.search(regex, token):
-            return False
-            
+    # check for single numbers
+    try:
+        float(str)
+        return False
+    except ValueError:
+        # split by operators
+        tokens = tokenize_equation(str)
+        number_regex = r'^\d*\.?\d+$'  # start, 0 or more digit, ., 1 or more digit, finish
+        for i, token in enumerate(tokens):
+            if token not in operators:
+                if not is_cell_name(token):
+                    is_number = re.search(number_regex, token)
+                    if not is_number:
+                        if token not in functions:
+                            return False
+                
     return True
 
-    
+def is_cell_range(str: str) -> bool:
+     regex = r'^[a-zA-Z]+\d+:[a-zA-Z]+\d+$'
+     return re.search(regex, str)
 
 
 # define arguments
@@ -274,6 +301,22 @@ def get_equation(x: int, y: int) -> str:
     
     return None
 
+def modify_equation(source_cell_name: str, source_x: int, source_y: int, target_x: int, target_y: int) -> str:
+    equation = equations[source_cell_name]
+    tokens = tokenize_equation(equation)
+    for i, token in enumerate(tokens):
+        try:
+            float(token)
+        except ValueError:
+            # find equivalent cell
+            if token not in operators:
+                other_x, other_y = convert_cell_name_to_x_y(token)
+                offset_x = other_x - source_x
+                offset_y = other_y - source_y
+                equivalent_cell_name = convert_x_to_alpha_value(target_x + offset_x) + str(target_y + offset_y)
+                tokens[i] = equivalent_cell_name
+
+    return ''.join(tokens)
 
 
 def TRIM_CELLS():
@@ -339,7 +382,6 @@ def APPLY_EQUATIONS():
     global cells, equations, width, height, operators
 
     equation_targets = {}
-    i = 0
     unresolved_equations = equations.copy()
     last_size = len(unresolved_equations) + 1
     while last_size > len(unresolved_equations):
@@ -351,6 +393,7 @@ def APPLY_EQUATIONS():
             tokens = tokenize_equation(equation)
 
             substituted_equation = []
+            
             for token in tokens:
                 if token not in operators:
                     failed_to_subsitute, float_value = substitute_if_ref(token, equation_targets)
@@ -466,10 +509,10 @@ def DISPLAY(show_equations=False):
                 try:
                     float(cur_line)
                     display.append(' ' * (cell_width - len(cur_line)))
-                    line = str(cur_line)
-                    display.append(line[:cell_width])
+                    cur_line = str(cur_line)
+                    display.append(grey_gradient(y, cur_line[:cell_width]))
                 except ValueError:
-                    display.append(cur_line[:cell_width])
+                    display.append(grey_gradient(y, cur_line[:cell_width]))
                     display.append(' ' * (cell_width - len(cur_line)))
 
                 display.append(print_cadet_grey(' |'))
@@ -605,21 +648,7 @@ def COPY(cell_names: list[str]):
 
         # modify if equation
         if source_cell_name in equations:
-            value = equations[source_cell_name]
-            tokens = tokenize_equation(value)
-            for i, token in enumerate(tokens):
-                try:
-                    float(token)
-                except ValueError:
-                    # find equivalent cell
-                    if token not in operators:
-                        other_x, other_y = convert_cell_name_to_x_y(token)
-                        offset_x = other_x - x
-                        offset_y = other_y - y
-                        equivalent_cell_name = convert_x_to_alpha_value(target_x + offset_x) + str(target_y + offset_y)
-                        tokens[i] = equivalent_cell_name
-
-            value = ''.join(tokens)
+            value = modify_equation(source_cell_name, x, y, target_x, target_y)
             target_name = convert_x_to_alpha_value(target_x) + str(target_y)
             equations[target_name] = value
         else:
@@ -660,6 +689,9 @@ while True:
             )
             print(
                 ice_blue('h') + tekhelet(' - show commands')
+            )
+            print(
+                ice_blue('l') + tekhelet(' - load file')
             )
             print(
                 ice_blue('s') + tekhelet(' - save file')
@@ -706,6 +738,8 @@ while True:
             REDO()
         elif command == 'h':
             show_instructions = True
+        elif command == 'l':
+            pass
         elif command == 's':
             SAVE()
         elif command == 'q':
