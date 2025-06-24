@@ -193,6 +193,8 @@ def tokenize_equation(equation: str) -> list[str]:
 def is_equation(str: str) -> bool:
     global operators, functions
 
+    if str == '': return False
+
     # check for single numbers
     try:
         float(str)
@@ -238,7 +240,7 @@ FILE = args.file
 NO_COMMANDS = args.no_commands
 PRECISION = 4
 
-cells=[]
+cells=[['']]
 width=1
 height=1
 equations = {}
@@ -246,39 +248,6 @@ wrapped_cell_names = set()
 
 actions = []
 undone_actions = []
-
-
-# READ if provided file
-csv_str = ''
-if (FILE != None and FILE != ''):
-    with open(FILE, 'r') as file:
-        csv_str = file.read()
-
-
-
-# PARSE CSV
-if (FILE != None and FILE != ''):
-    lines = csv_str.split('\n')
-    for i, line in enumerate(lines):
-        if not line.startswith('<meta>') and line != '':
-            line_cells = line.split(',')
-            cells.append(line_cells)
-
-    # PARSE META DATA
-    for i, line in enumerate(lines):
-        if line.startswith('<meta>'):
-            equation = line.split('<meta>')[1]
-            equation = equation.replace(' ', '')
-            target, equation = equation.split('=')
-            equations[target] = equation
-else:
-    cells=[['']]
-
-width = len(cells[0])
-for row in cells:
-    if len(row) > width: width = len(row)
-height = len(cells)
-
 
 
 
@@ -568,11 +537,56 @@ def get_current_contents(cell_name, x, y):
     else:
         return ''
 
+def LOAD():
+    global cells, equations, width, height, FILE, wrapped_cell_names, actions, undone_actions
+
+    cells.clear()
+    width = 1
+    height = 1
+    equations = {}
+    wrapped_cell_names = set()
+
+    actions.clear()
+    undone_actions.clear()
+
+
+    # READ if provided file
+    csv_str = ''
+    if (FILE != None and FILE != ''):
+        with open(FILE, 'r') as file:
+            csv_str = file.read()
+
+    # PARSE CSV
+    if (FILE != None and FILE != ''):
+        cells.clear()
+
+        lines = csv_str.split('\n')
+        for i, line in enumerate(lines):
+            if not line.startswith('<meta>') and line != '':
+                line_cells = line.split(',')
+                cells.append(line_cells)
+
+        # PARSE META DATA
+        for i, line in enumerate(lines):
+            if line.startswith('<meta>'):
+                equation = line.split('<meta>')[1]
+                equation = equation.replace(' ', '')
+                target, equation = equation.split('=')
+                equations[target] = equation
+
+
+    width = len(cells[0])
+    for row in cells:
+        if len(row) > width: width = len(row)
+    height = len(cells)
+
+
+
 def SAVE():
     global cells, FILE, equations
 
     if FILE == None or FILE == '': 
-        print(mint_green('file name: '), end='')
+        print(mint_green('file path: '), end='')
         FILE = input()
     else:
         print(mint_green('saving to ') + FILE)
@@ -690,10 +704,29 @@ def COPY(cell_names: list[str]):
             equations[target_name] = value
         else:
             set_cell(cells, target_x, target_y, value)
-            
+
+def WRAP(command):
+    cell_name = command[2:]
+    target_cells = []
+
+    WRITE_ACTION_FOR_UNDO()
+    if is_cell_range(cell_name):
+        target_cells = convert_cell_range_to_targets(cell_name)
+    else:
+        x, y = convert_cell_name_to_x_y(cell_name)
+        target_cells.append([x, y])
+
+    for x, y in target_cells:
+        cell_name = convert_x_to_alpha_value(x) + str(y)
+        if cell_name in wrapped_cell_names:
+            wrapped_cell_names.remove(cell_name)
+        else: 
+            wrapped_cell_names.add(cell_name)
+
 
 
 # do equations and diaply csv
+LOAD()
 APPLY_EQUATIONS()
 DISPLAY()
 
@@ -779,27 +812,13 @@ while True:
         elif command == 'h':
             show_instructions = True
         elif command.startswith("w "):
-            cell_name = command[2:]
-            target_cells = []
-
-            WRITE_ACTION_FOR_UNDO()
-            if is_cell_range(cell_name):
-                target_cells = convert_cell_range_to_targets(cell_name)
-            else:
-                x, y = convert_cell_name_to_x_y(cell_name)
-                target_cells.append([x, y])
-
-            for x, y in target_cells:
-                cell_name = convert_x_to_alpha_value(x) + str(y)
-                if cell_name in wrapped_cell_names:
-                    wrapped_cell_names.remove(cell_name)
-                else: 
-                    wrapped_cell_names.add(cell_name)
-
-            reprint = True
-            
+            WRAP(command)
+            reprint = True   
         elif command == 'l':
-            pass
+            print(mint_green('file path: '), end='')
+            FILE = input()
+            LOAD()
+            reprint = True
         elif command == 's':
             SAVE()
         elif command == 'q':
