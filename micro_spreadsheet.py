@@ -237,12 +237,12 @@ def convert_cell_range_to_targets(cell_range: str) -> list[tuple[int, int]]:
 
 # define arguments
 parser = argparse.ArgumentParser(description="A terminal app for editing csv's or making spreadsheets")
-parser.add_argument('-f', '--file', required=False, help='path to your csv or spreadsheet file. otherwise a new file is opened')
-parser.add_argument('-nc', '--no_commands', required=False, action='store_true', help='whether to show command hints during editing')
+parser.add_argument('file', nargs='?', help='path to your csv or spreadsheet file. otherwise a new file is opened')
+parser.add_argument('-c', '--commands', required=False, action='store_true', help='whether to show command hints during editing')
 args = parser.parse_args()
 
 FILE = args.file
-NO_COMMANDS = args.no_commands
+NO_COMMANDS = not args.commands
 PRECISION = 4
 
 cells=[['']]
