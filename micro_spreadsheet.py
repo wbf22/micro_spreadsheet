@@ -1,7 +1,12 @@
 
 import argparse
 import copy
+import os
 import re
+import signal
+import sys
+import termios
+import tty
 
 
 '''
@@ -249,6 +254,8 @@ wrapped_cell_names = set()
 actions = []
 undone_actions = []
 
+command_stack = []
+
 
 
 def set_cell(cells: list[list[str]], x: int, y: int, value: str):
@@ -301,6 +308,94 @@ def modify_equation(source_cell_name: str, source_x: int, source_y: int, target_
                 tokens[i] = equivalent_cell_name
 
     return ''.join(tokens)
+
+old_settings = None
+fd = None
+def handle_exit(signum, frame):
+    if old_settings != None and fd != None:
+        termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
+    sys.exit(0)
+signal.signal(signal.SIGINT, handle_exit)
+signal.signal(signal.SIGTERM, handle_exit)
+
+def input_f():
+    global command_stack, old_settings, fd
+
+
+    fd = sys.stdin.fileno()
+    old_settings = termios.tcgetattr(fd)
+    try:
+        tty.setraw(sys.stdin.fileno())
+
+        chars = []
+        total_in = ''
+        ch = ''
+        cursor_pos = 0
+        command_stack_position = len(command_stack)
+        escaped = False
+        while ch != '\n' and ch != '\r':
+            ch = sys.stdin.read(1)
+            if ch == '\n' or ch == '\r':
+                break
+
+            if not escaped:
+                if ch == '\x7f':
+                    if len(chars) > 0:
+                        chars.pop()
+                        cursor_pos -= 1
+                elif ch == '\x1b':
+                    escaped = True
+                elif ch == '\x03':
+                    os.kill(os.getpid(), signal.SIGINT)
+                else:
+                    if cursor_pos >= len(chars):
+                        chars.append(ch)
+                    else:
+                        chars[cursor_pos] = ch
+                    cursor_pos += 1
+            elif escaped:
+                ch = sys.stdin.read(1)
+                if ch == 'D':
+                    if cursor_pos > 0:
+                        cursor_pos -= 1
+                elif ch == 'C':
+                    if cursor_pos < len(total_in):
+                        cursor_pos += 1
+                elif ch == 'A':
+                    if command_stack_position > 0:
+                        command_stack_position -= 1
+                    chars = [c for c in command_stack[command_stack_position]]
+                    cursor_pos = len(chars)
+                elif ch == 'B':
+                    if command_stack_position < len(command_stack)-1:
+                        command_stack_position += 1
+                        chars = [c for c in command_stack[command_stack_position]]
+                        cursor_pos = len(chars)
+                    else:
+                        chars = []
+                        cursor_pos = 0
+
+                escaped = False
+
+            total_in = ''.join(chars)
+            
+            print(f"\033[{4}G", end='') # go to start of line
+            print("\033[K", end='') # clear to end of line
+            print(total_in, end='') # print chars
+            print(f"\r\033[{cursor_pos+3}C", end='')
+
+            
+    finally:
+        termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
+
+    print()
+    # print('test')
+    # print('test')
+    # print('test')
+    # print('test')
+
+    return ''.join(chars)
+
 
 
 def TRIM_CELLS():
@@ -538,26 +633,27 @@ def get_current_contents(cell_name, x, y):
         return ''
 
 def LOAD():
-    global cells, equations, width, height, FILE, wrapped_cell_names, actions, undone_actions
+    global cells, equations, width, height, FILE, wrapped_cell_names, actions, undone_actions, command_stack
 
-    cells.clear()
-    width = 1
-    height = 1
+    cells=[['']]
+    width=1
+    height=1
     equations = {}
     wrapped_cell_names = set()
 
-    actions.clear()
-    undone_actions.clear()
+    actions = []
+    undone_actions = []
+
+    command_stack = []
 
 
-    # READ if provided file
     csv_str = ''
     if (FILE != None and FILE != ''):
+        # READ if provided file
         with open(FILE, 'r') as file:
             csv_str = file.read()
 
-    # PARSE CSV
-    if (FILE != None and FILE != ''):
+        # PARSE CSV
         cells.clear()
 
         lines = csv_str.split('\n')
@@ -579,8 +675,6 @@ def LOAD():
     for row in cells:
         if len(row) > width: width = len(row)
     height = len(cells)
-
-
 
 def SAVE():
     global cells, FILE, equations
@@ -736,7 +830,7 @@ show_instructions = not NO_COMMANDS
 # loop
 while True:
 
-    # try:
+    try:
 
         if show_instructions:
             print(
@@ -777,7 +871,8 @@ while True:
             )
             show_instructions = False
         print(mint_green('$: '), end='')
-        command = input()
+        command = input_f()
+        command_stack.append(command)
         
         reprint = False
         if command == 'd':
@@ -856,10 +951,10 @@ while True:
             APPLY_EQUATIONS()
             DISPLAY()
 
-    # except Exception as e:
-    #     print(print_red("\n--- ERROR ---"))
-    #     print(e)
-    #     print()
+    except Exception as e:
+        print(print_red("\n--- ERROR ---"))
+        print(e)
+        print()
 
 
 
