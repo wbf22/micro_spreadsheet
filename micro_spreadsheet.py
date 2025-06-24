@@ -179,7 +179,7 @@ def is_equation(str: str) -> bool:
     tokens = tokenize_equation(str)
     regex = r'^[a-zA-Z]*\d+$'  # start, 0 or more alpha, 1 or more digit
     for token in tokens:
-        if not re.search(regex, token):
+        if token not in operators and not re.search(regex, token):
             return False
             
     return True
@@ -215,11 +215,22 @@ if (FILE != None and FILE != ''):
 
 
 # PARSE CSV
-lines = csv_str.split('\n')
-for i, line in enumerate(lines):
-    if not line.startswith('<meta>') and line != '':
-        line_cells = line.split(',')
-        cells.append(line_cells)
+if (FILE != None and FILE != ''):
+    lines = csv_str.split('\n')
+    for i, line in enumerate(lines):
+        if not line.startswith('<meta>') and line != '':
+            line_cells = line.split(',')
+            cells.append(line_cells)
+
+    # PARSE META DATA
+    for i, line in enumerate(lines):
+        if line.startswith('<meta>'):
+            equation = line.split('<meta>')[1]
+            equation = equation.replace(' ', '')
+            target, equation = equation.split('=')
+            equations[target] = equation
+else:
+    cells=[['']]
 
 width = len(cells[0])
 for row in cells:
@@ -227,13 +238,6 @@ for row in cells:
 height = len(cells)
 
 
-# PARSE META DATA
-for i, line in enumerate(lines):
-    if line.startswith('<meta>'):
-        equation = line.split('<meta>')[1]
-        equation = equation.replace(' ', '')
-        target, equation = equation.split('=')
-        equations[target] = equation
 
 
 def set_cell(cells: list[list[str]], x: int, y: int, value: str):
@@ -497,7 +501,7 @@ def SAVE():
         for y, row in enumerate(cells):
             for x, value in enumerate(row):
                 file.write(str(value))
-                if value != row[-1]:
+                if x != len(row)-1:
                     file.write(',')
             file.write('\n')
 
