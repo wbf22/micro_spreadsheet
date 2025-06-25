@@ -79,7 +79,7 @@ def substitute_if_ref(value: str, equation_targets: {str, float}) -> tuple[bool,
                 try:
                     float_value = float(cells[y][x])
                 except ValueError:
-                    float_value = 0
+                    return False, cells[y][x]
 
     return False, float_value
 
@@ -164,6 +164,9 @@ def black(str: str) -> str:
     # return print_in_color(str, '\033[38;2;0;0;0m')
     return print_in_color(str, '\033[2m')
 
+def lighter_background(str: str) -> str:
+    return print_in_color(str, '\033[48;2;40;40;40m')
+
 
 
 def get_float_precision(f):
@@ -213,7 +216,9 @@ def is_equation(str: str) -> bool:
                 if not is_cell_name(token):
                     is_number = re.search(number_regex, token)
                     if not is_number:
-                        if token not in functions:
+                        next = None if len(tokens) <= i+1 else tokens[i+1]
+                        is_function = token in functions and next == '('
+                        if not is_function:
                             return False
                 
     return True
@@ -250,6 +255,7 @@ width=1
 height=1
 equations = {}
 wrapped_cell_names = set()
+current_cell = 'a0'
 
 actions = []
 undone_actions = []
@@ -309,6 +315,14 @@ def modify_equation(source_cell_name: str, source_x: int, source_y: int, target_
 
     return ''.join(tokens)
 
+def set_current_cell(last_x: int, last_y: int):
+    global current_cell
+    current_cell = convert_x_to_alpha_value(last_x) + str(last_y+1)
+    current_value = get_cell(cells, last_x, last_y+1)
+    current_value = '' if current_value == None else current_value
+    set_cell(cells, last_x, last_y+1, current_value)
+    
+
 old_settings = None
 fd = None
 def handle_exit(signum, frame):
@@ -321,6 +335,7 @@ signal.signal(signal.SIGTERM, handle_exit)
 def input_f():
     global command_stack, old_settings, fd
 
+    sys.stdout.flush()
 
     fd = sys.stdin.fileno()
     old_settings = termios.tcgetattr(fd)
@@ -351,7 +366,7 @@ def input_f():
                     if cursor_pos >= len(chars):
                         chars.append(ch)
                     else:
-                        chars[cursor_pos] = ch
+                        chars = chars[:cursor_pos] + [ch] + chars[cursor_pos:]
                     cursor_pos += 1
             elif escaped:
                 ch = sys.stdin.read(1)
@@ -364,8 +379,9 @@ def input_f():
                 elif ch == 'A':
                     if command_stack_position > 0:
                         command_stack_position -= 1
-                    chars = [c for c in command_stack[command_stack_position]]
-                    cursor_pos = len(chars)
+                    if len(command_stack) > command_stack_position:
+                        chars = [c for c in command_stack[command_stack_position]]
+                        cursor_pos = len(chars)
                 elif ch == 'B':
                     if command_stack_position < len(command_stack)-1:
                         command_stack_position += 1
@@ -399,9 +415,11 @@ def input_f():
 
 
 def TRIM_CELLS():
-    global cells, equations, height, width
+    global cells, equations, height, width, current_cell
 
-    # remove empty rows or columns
+    current_x, current_y = convert_cell_name_to_x_y(current_cell)
+    
+    # find last row and column with data
     last_y_with_data = len(cells)
     for y in range(height-1, -1, -1):
         row_has_data = False
@@ -427,7 +445,11 @@ def TRIM_CELLS():
             last_x_with_data = x
         else:
             break
+    
+    last_y_with_data = max(last_y_with_data, current_y+1)
+    last_x_with_data = max(last_x_with_data, current_x+1)
 
+    # remove empty rows or columns
     cells = cells[:last_y_with_data]
     for y in range(0, len(cells)):
         cells[y] = cells[y][:last_x_with_data]
@@ -524,7 +546,7 @@ def APPLY_EQUATIONS():
             cells[y].append('')
 
 def DISPLAY(show_equations=False):
-    global cells, width, height
+    global cells, width, height, current_cell
 
     # clear screen
     print("\033[2J\033[H")
@@ -574,6 +596,8 @@ def DISPLAY(show_equations=False):
     display.append('\n')
 
 
+    current_x, current_y = convert_cell_name_to_x_y(current_cell)
+
     # rows
     for y, row in enumerate(cells):
 
@@ -589,6 +613,7 @@ def DISPLAY(show_equations=False):
 
             # cells
             for x, value in enumerate(row):
+
                 if show_equations:
                     equation = get_equation(x, y)
                     if equation != None: value = equation
@@ -605,18 +630,29 @@ def DISPLAY(show_equations=False):
                     cur_line = '' if cell_h >= len(lines) else lines[cell_h]
                 else: cur_line = 'Error'
 
-                display.append(' ')
-
+                cell_contents = []
+                cell_contents.append(' ')
                 try:
                     float(cur_line)
-                    display.append(' ' * (cell_width - len(cur_line)))
+                    cell_contents.append(' ' * (cell_width - len(cur_line)))
                     cur_line = str(cur_line)
-                    display.append(grey_gradient(y, cur_line[:cell_width]))
+                    cell_contents.append(grey_gradient(y, cur_line[:cell_width]))
                 except ValueError:
-                    display.append(grey_gradient(y, cur_line[:cell_width]))
-                    display.append(' ' * (cell_width - len(cur_line)))
+                    cell_contents.append(grey_gradient(y, cur_line[:cell_width]))
+                    cell_contents.append(' ' * (cell_width - len(cur_line)))
+                cell_contents.append(' ')
 
-                display.append(print_cadet_grey(' |'))
+
+                if x == current_x and y == current_y:
+                    display.append(
+                        ''.join([lighter_background(s) for s in cell_contents])
+                    )
+                else:
+                    display.append(
+                        ''.join(cell_contents)
+                    )
+
+                display.append(print_cadet_grey('|'))
 
             display.append('\n')
 
@@ -762,7 +798,7 @@ def REDO():
     wrapped_cell_names = copy.deepcopy(previous_state['wrapped_cell_names'])
 
 def COPY(cell_names: list[str]):
-    global cells, equations, operators
+    global cells, equations, operators, current_cell
 
     WRITE_ACTION_FOR_UNDO()
 
@@ -792,12 +828,14 @@ def COPY(cell_names: list[str]):
         target_y = target_start_y + offset_from_start_y
 
         # modify if equation
+        target_name = convert_x_to_alpha_value(target_x) + str(target_y)
         if source_cell_name in equations:
             value = modify_equation(source_cell_name, x, y, target_x, target_y)
-            target_name = convert_x_to_alpha_value(target_x) + str(target_y)
             equations[target_name] = value
         else:
             set_cell(cells, target_x, target_y, value)
+
+    set_current_cell(last_x, last_y)
 
 def WRAP(command):
     cell_name = command[2:]
@@ -916,7 +954,7 @@ while True:
             reprint = True
         elif command == 's':
             SAVE()
-        elif command == 'q':
+        elif command == 'q' or command == 'quit':
             break
         else:
             show_instructions = not NO_COMMANDS
@@ -925,24 +963,39 @@ while True:
             # add to stack
             WRITE_ACTION_FOR_UNDO()
 
-            cell_name, value = command.split('=')
+            if '=' in command:
+                cell_name, value = command.split('=')
 
-            # get input cell(s)
-            target_cells = []
-            if ':' in cell_name:
-                target_cells = convert_cell_range_to_targets(cell_name)
-            else:
-                x, y = convert_cell_name_to_x_y(cell_name)
-                target_cells.append([x, y])
-
-            # set cells
-            for x, y in target_cells:
-                target_cell_name = convert_x_to_alpha_value(x) + str(y)
-                if is_equation(value.replace(" ", "")):
-                    equations[target_cell_name] = value.replace(" ", "")
+                # get input cell(s)
+                target_cells = []
+                if ':' in cell_name:
+                    target_cells = convert_cell_range_to_targets(cell_name)
                 else:
-                    if target_cell_name in equations: del equations[target_cell_name]
+                    x, y = convert_cell_name_to_x_y(cell_name)
+                    target_cells.append([x, y])
+
+                # set cells
+                for x, y in target_cells:
+                    target_cell_name = convert_x_to_alpha_value(x) + str(y)
+                    if is_equation(value.replace(" ", "")):
+                        equations[target_cell_name] = value.replace(" ", "")
+                    else:
+                        if target_cell_name in equations: del equations[target_cell_name]
+                        set_cell(cells, x, y, value)
+                
+                last_x, last_y = target_cells[-1]
+                set_current_cell(last_x, last_y)
+            
+            else:
+                value = command
+                x, y = convert_cell_name_to_x_y(current_cell)
+                if is_equation(value.replace(" ", "")):
+                    equations[current_cell] = value.replace(" ", "")
+                else:
+                    if current_cell in equations: del equations[current_cell]
                     set_cell(cells, x, y, value)
+                
+                set_current_cell(x, y)
 
 
         if reprint:
