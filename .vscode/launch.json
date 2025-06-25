@@ -11,8 +11,9 @@
             "program": "micro_spreadsheet.py",
             "console": "integratedTerminal",
             // "args": "-c"
-            // "args": "test.csv"
-            "args": ""
+            // "args": "brandon_and_some_ashlyn.csv"
+            "args": "test.csv"
+            // "args": ""
             // "args": "-h"
         }
     ]

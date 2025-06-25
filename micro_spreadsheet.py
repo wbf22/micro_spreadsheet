@@ -240,6 +240,62 @@ def convert_cell_range_to_targets(cell_range: str) -> list[tuple[int, int]]:
     return target_cells
 
 
+def hsl_to_rgb(h, s, l):
+    # Normalize hue to [0, 360]
+    h = h % 360
+    # Normalize saturation and lightness to [0, 1]
+    s /= 100
+    l /= 100
+
+    r = 0
+    g = 0
+    b = 0
+
+
+    if s == 0:
+        # Achromatic (gray)
+        r = g = b = l * 255;
+    else:
+        c = (1 - abs(2 * l - 1)) * s # Chroma
+        x = c * (1 - abs((h / 60) % 2 - 1)); # Secondary component
+        m = l - c / 2; # Match lightness
+
+        # Determine RGB values based on hue
+        if h >= 0 and h < 60:
+            r = c
+            g = x
+            b = 0
+        elif h >= 60 and h < 120:
+            r = x
+            g = c
+            b = 0
+        elif h >= 120 and h < 180:
+            r = 0
+            g = c
+            b = x
+        elif h >= 180 and h < 240:
+            r = 0
+            g = x
+            b = c
+        elif h >= 240 and h < 300:
+            r = x
+            g = 0
+            b = c
+        else:
+            r = c
+            g = 0
+            b = x
+        
+
+        # Adjust for lightness
+        r = round((r + m) * 255)
+        g = round((g + m) * 255)
+        b = round((b + m) * 255)
+    
+
+    return r, g, b
+
+
 # define arguments
 parser = argparse.ArgumentParser(description="A terminal app for editing csv's or making spreadsheets")
 parser.add_argument('file', nargs='?', help='path to your csv or spreadsheet file. otherwise a new file is opened')
@@ -254,6 +310,7 @@ cells=[['']]
 width=1
 height=1
 equations = {}
+colors = {}
 wrapped_cell_names = set()
 current_cell = 'a0'
 
@@ -551,7 +608,7 @@ def APPLY_EQUATIONS():
             cells[y].append('')
 
 def DISPLAY(show_equations=False):
-    global cells, width, height, current_cell
+    global cells, width, height, current_cell, colors
 
     # clear screen
     print("\033[2J\033[H")
@@ -624,10 +681,10 @@ def DISPLAY(show_equations=False):
                     if equation != None: value = equation
 
                 cell_width = column_widths[x]
+                cell_name = convert_x_to_alpha_value(x) + str(y)
                 cur_line = ''
                 if value != None:
                     lines = []
-                    cell_name = convert_x_to_alpha_value(x) + str(y)
                     if cell_name in wrapped_cell_names:
                         lines = wrap(cell_width, value).split('\n')
                     else:
@@ -641,9 +698,15 @@ def DISPLAY(show_equations=False):
                     float(cur_line)
                     cell_contents.append(' ' * (cell_width - len(cur_line)))
                     cur_line = str(cur_line)
-                    cell_contents.append(grey_gradient(y, cur_line[:cell_width]))
+                    if cell_name in colors: 
+                        r, g, b = colors[cell_name]
+                        cell_contents.append(print_in_color(cur_line[:cell_width], f'\033[38;2;{r};{g};{b}m')) 
+                    else: cell_contents.append(cur_line[:cell_width])
                 except ValueError:
-                    cell_contents.append(grey_gradient(y, cur_line[:cell_width]))
+                    if cell_name in colors: 
+                        r, g, b = colors[cell_name]
+                        cell_contents.append(print_in_color(cur_line[:cell_width], f'\033[38;2;{r};{g};{b}m')) 
+                    else: cell_contents.append(cur_line[:cell_width])
                     cell_contents.append(' ' * (cell_width - len(cur_line)))
                 cell_contents.append(' ')
 
@@ -674,7 +737,7 @@ def get_current_contents(cell_name, x, y):
         return ''
 
 def LOAD():
-    global cells, equations, width, height, FILE, wrapped_cell_names, actions, undone_actions, command_stack
+    global cells, equations, width, height, FILE, wrapped_cell_names, actions, undone_actions, command_stack, colors
 
     cells=[['']]
     width=1
@@ -705,7 +768,14 @@ def LOAD():
 
         # PARSE META DATA
         for i, line in enumerate(lines):
-            if line.startswith('<meta>'):
+            if line.startswith('<meta> color '):
+                color_set = line.split('<meta> color ')[1]
+                target, rgb = color_set.split('=')
+                r, g, b = rgb.split(',')
+                colors[target] = [int(r), int(g), int(b)]
+                recent_colors.append([r,g,b])
+
+            elif line.startswith('<meta>'):
                 equation = line.split('<meta>')[1]
                 equation = equation.replace(' ', '')
                 target, equation = equation.split('=')
@@ -740,23 +810,32 @@ def SAVE():
             file.write('=')
             file.write(equation)
             file.write('\n')
+
+        for target_cell_name, [r, g, b] in colors.items():
+            file.write('<meta> color ')
+            file.write(target_cell_name)
+            file.write('=')
+            file.write(str(r) + ',' + str(g) + ',' + str(b))
+            file.write('\n')
+
     
     file.close()
 
 def WRITE_ACTION_FOR_UNDO():
-    global cells, width, height, equations, wrapped_cell_names
+    global cells, width, height, equations, wrapped_cell_names, colors
     actions.append({
         'cells': copy.deepcopy(cells),
         'width': width,
         'height': height,
         'equations': copy.deepcopy(equations),
-        'wrapped_cell_names': copy.deepcopy(wrapped_cell_names)
+        'wrapped_cell_names': copy.deepcopy(wrapped_cell_names),
+        'colors': copy.deepcopy(colors)
     })
 
     undone_actions.clear()
 
 def UNDO():
-    global cells, width, height, equations, wrapped_cell_names
+    global cells, width, height, equations, wrapped_cell_names, colors
 
     if len(actions) == 0: return
 
@@ -769,7 +848,8 @@ def UNDO():
         'width': width,
         'height': height,
         'equations': copy.deepcopy(equations),
-        'wrapped_cell_names': copy.deepcopy(wrapped_cell_names)
+        'wrapped_cell_names': copy.deepcopy(wrapped_cell_names),
+        'colors': copy.deepcopy(colors)
     })
 
     # reset to last state
@@ -778,9 +858,10 @@ def UNDO():
     height = last_state['height']
     equations = copy.deepcopy(last_state['equations'])
     wrapped_cell_names = copy.deepcopy(last_state['wrapped_cell_names'])
+    colors = copy.deepcopy(last_state['colors'])
 
 def REDO():
-    global cells, width, height, equations, wrapped_cell_names
+    global cells, width, height, equations, wrapped_cell_names, colors
     if len(undone_actions) == 0: return
 
     # pop undone state
@@ -792,7 +873,8 @@ def REDO():
         'width': width,
         'height': height,
         'equations': copy.deepcopy(equations),
-        'wrapped_cell_names': copy.deepcopy(wrapped_cell_names)
+        'wrapped_cell_names': copy.deepcopy(wrapped_cell_names),
+        'colors': copy.deepcopy(colors)
     })
 
     # reset to undone state
@@ -801,6 +883,7 @@ def REDO():
     height = previous_state['height']
     equations = copy.deepcopy(previous_state['equations'])
     wrapped_cell_names = copy.deepcopy(previous_state['wrapped_cell_names'])
+    colors = copy.deepcopy(previous_state['colors'])
 
 def COPY(cell_names: list[str]):
     global cells, equations, operators, current_cell
@@ -950,11 +1033,133 @@ def MOVE():
         DISPLAY()
    
 
+recent_colors = []
+def PICK_COLOR():
+    global recent_colors
+
+    WRITE_ACTION_FOR_UNDO()
+
+
+    h = 130
+    s = 80
+    l = 25
+
+
+    fd = sys.stdin.fileno()
+    old_settings = termios.tcgetattr(fd)
+
+    print("\033[?25l", end='') # hide cursor
+
+    digits=[]
+    ch = ''
+    escaped = False
+    up_down = 0
+    while ch != '\n' and ch != '\r':
+
+        print("\033[2J\033[H") # clear screen
+
+        print('RECENTS')
+        for i, [rr, rg, rb] in enumerate(recent_colors):
+            print(f'\033[48;2;{rr};{rg};{rb}m  ', end='')
+            print(ANSII_RESET + ' ' + str(i) + ' ', end='')
+            if i % 10 == 9: print()
+
+        print()
+        print()
+        r, g, b = hsl_to_rgb(h, s, l)
+        print(f'\033[48;2;{r};{g};{b}m         ')
+        print(f'\033[48;2;{r};{g};{b}m         ')
+        print(ANSII_RESET, end='')
+        
+        if up_down == 0: print('\033[47m\033[30m', end='')
+        print('hue' + ANSII_RESET + ' ' + str(h))
+        if up_down == 1: print('\033[47m\033[30m', end='')
+        print('saturation' + ANSII_RESET + ' ' + str(s))
+        if up_down == 2: print('\033[47m\033[30m', end='')
+        print('lightness' + ANSII_RESET + ' ' + str(l))
+
+        print()
+        print(''.join(digits))
+
+        
+        tty.setraw(sys.stdin.fileno())
+        ch = sys.stdin.read(1)
+        termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
+        if ch == '\n' or ch == '\r':
+            break
+
+        modification = 0
+
+        # handle arrow key movement ( or recent color selction)
+        if not escaped:
+            if ch == '\x1b':
+                escaped = True
+            elif ch == 'j':
+                modification += 1
+            elif ch == 'l':
+                modification -= 1
+            elif ch == 'i':
+                up_down += 1
+                up_down = up_down % 3
+            elif ch == 'k':
+                up_down -= 1
+                if up_down < 0: up_down += 3
+            elif ch.isdigit():
+                digits.append(ch)
+                
+        elif escaped:
+            ch = sys.stdin.read(1)
+            
+            if ch == 'D':
+                modification -= 1
+            elif ch == 'C':
+                modification += 1
+            elif ch == 'A':
+                up_down -= 1
+                if up_down < 0: up_down += 3
+            elif ch == 'B':
+                up_down += 1
+                up_down = up_down % 3
+
+            escaped = False
+
+
+        # hue
+        if up_down == 0:
+            h += modification * 5
+            if h < 0: h = 0
+            if h > 360: h = 360
+        # staturation
+        elif up_down == 1:
+            s += modification * 5
+            if s < 0: s = 0
+            if s > 100: s = 100
+        # lightness
+        elif up_down == 2:
+            l += modification
+            if l < 0: l = 0
+            if l > 100: l = 100
+
+        
+    print("\033[?25h", end='') # show cursor
+    print(ANSII_RESET, end='') # show cursor
+    print("\033[2J\033[H") # clear screen
+    
+    if len(digits) > 0:
+        i = int(''.join(digits))
+        r, g, b = recent_colors[i]
+    else:
+        r, g, b = hsl_to_rgb(h, s, l)
+        recent_colors.append([r,g,b])
+    
+    return r, g, b
+
 
 # do equations and diaply csv
 LOAD()
 APPLY_EQUATIONS()
 DISPLAY()
+
 
 
 show_instructions = not NO_COMMANDS
@@ -982,6 +1187,9 @@ while True:
             )
             print(
                 ice_blue('r') + tekhelet(' - redo')
+            )
+            print(
+                ice_blue('color') + tekhelet(' - set the color for a cell')
             )
             print(
                 ice_blue('w') + tekhelet(' - toogle wrap/extend on a cell')
@@ -1041,6 +1249,11 @@ while True:
         elif command == 'r':
             reprint = True
             REDO()
+        elif command == 'color':
+            reprint = True
+            r,g,b = PICK_COLOR()
+            colors[current_cell] = [r,g,b]
+
         elif command.startswith("w "):
             WRAP(command)
             reprint = True
