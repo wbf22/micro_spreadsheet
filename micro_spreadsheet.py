@@ -356,8 +356,13 @@ def input_f():
             if not escaped:
                 if ch == '\x7f':
                     if len(chars) > 0:
-                        chars.pop()
-                        cursor_pos -= 1
+                        if cursor_pos >= len(chars):
+                            chars.pop()
+                        elif cursor_pos > 0:
+                            chars = chars[:cursor_pos-1] + chars[cursor_pos:]
+
+                        if cursor_pos > 0: cursor_pos -= 1
+                        
                 elif ch == '\x1b':
                     escaped = True
                 elif ch == '\x03':
@@ -814,6 +819,8 @@ def COPY(cell_names: list[str]):
 
     startx, starty = source_cells[0]
 
+    last_x = 0
+    last_y = 0
     for x, y in source_cells:
         # get value
         value = ''
@@ -835,7 +842,28 @@ def COPY(cell_names: list[str]):
         else:
             set_cell(cells, target_x, target_y, value)
 
+        last_x = target_x
+        last_y = target_y
+
     set_current_cell(last_x, last_y)
+         
+def CUT(cell_names: list[str]):
+    global cells
+
+
+    COPY(cell_names)
+
+    cell_name, target_cell_name = cell_names
+
+    source_cells = []
+    if ':' in cell_name:
+        source_cells = convert_cell_range_to_targets(cell_name)
+    else:
+        x, y = convert_cell_name_to_x_y(cell_name)
+        source_cells.append([x, y])
+
+    for x, y in source_cells:
+        set_cell(cells, x, y, '')
 
 def WRAP(command):
     cell_name = command[2:]
@@ -855,6 +883,72 @@ def WRAP(command):
         else: 
             wrapped_cell_names.add(cell_name)
 
+def MOVE():
+    global current_cell
+
+    # reprint everything
+    TRIM_CELLS()
+    APPLY_EQUATIONS()
+    DISPLAY()
+
+    sys.stdout.flush()
+
+    fd = sys.stdin.fileno()
+    old_settings = termios.tcgetattr(fd)
+
+    ch = ''
+    escaped = False
+    while ch != '\n' and ch != '\r':
+        
+        tty.setraw(sys.stdin.fileno())
+        ch = sys.stdin.read(1)
+        termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
+        if ch == '\n' or ch == '\r':
+            break
+
+        x, y = convert_cell_name_to_x_y(current_cell)
+
+        # handle arrow key movement
+        if not escaped:
+            if ch == '\x1b':
+                escaped = True
+            elif ch == 'j':
+                if x > 0:
+                    x -= 1
+            elif ch == 'l':
+                x += 1
+            elif ch == 'i':
+                if y > 0:
+                    y -= 1
+            elif ch == 'k':
+                y += 1
+        elif escaped:
+            ch = sys.stdin.read(1)
+            
+            if ch == 'D':
+                if x > 0:
+                    x -= 1
+            elif ch == 'C':
+                x += 1
+            elif ch == 'A':
+                if y > 0:
+                    y -= 1
+            elif ch == 'B':
+                y += 1
+
+            escaped = False
+
+
+        set_current_cell(x, y-1)
+        
+        print(f"\033[{4}G", end='') # go to start of line
+        print("\033[K", end='') # clear to end of line
+
+        # reprint everything
+        TRIM_CELLS()
+        APPLY_EQUATIONS()
+        DISPLAY()
+   
 
 
 # do equations and diaply csv
@@ -890,10 +984,13 @@ while True:
                 ice_blue('r') + tekhelet(' - redo')
             )
             print(
-                ice_blue('h') + tekhelet(' - show commands')
+                ice_blue('w') + tekhelet(' - toogle wrap/extend on a cell')
             )
             print(
-                ice_blue('w') + tekhelet(' - toogle wrap/extend on a cell')
+                ice_blue('m') + tekhelet(' - move around with arrow keys or ijkl (hit enter to stop)')
+            )
+            print(
+                ice_blue('h') + tekhelet(' - show commands')
             )
             print(
                 ice_blue('l') + tekhelet(' - load file')
@@ -934,19 +1031,23 @@ while True:
             cell_names = command[2:].split(' ')
             COPY(cell_names)
             reprint = True
-        elif command == 'x':
-            pass
+        elif command.startswith("x "):
+            cell_names = command[2:].split(' ')
+            CUT(cell_names)
+            reprint = True
         elif command == 'z':
             reprint = True
             UNDO()
         elif command == 'r':
             reprint = True
             REDO()
-        elif command == 'h':
-            show_instructions = True
         elif command.startswith("w "):
             WRAP(command)
-            reprint = True   
+            reprint = True
+        elif command == 'm':
+            MOVE()
+        elif command == 'h':
+            show_instructions = True
         elif command == 'l':
             print(mint_green('file path: '), end='')
             FILE = input()
