@@ -189,7 +189,8 @@ def tokenize_equation(equation: str) -> list[str]:
             last_is_op = False if i-1 == 0 else equation[i-1] in operators
             if not last_is_op:
                 value = equation[last:i]
-                tokens.append(value)
+                if value != '':
+                    tokens.append(value)
             tokens.append(c)
             last = i + 1
 
@@ -322,8 +323,9 @@ command_stack = []
 
 
 def set_cell(cells: list[list[str]], x: int, y: int, value: str):
-    global width, height
+    global width, height, colors
 
+    # add missing cells
     while y >= len(cells):
         cells.append([])
     height = len(cells)
@@ -331,6 +333,7 @@ def set_cell(cells: list[list[str]], x: int, y: int, value: str):
         cells[y].append('')
     width = max(width, x+1)
 
+    # set in cells (and format if float)
     if isinstance(value, float):
         int_resolution = int(value)
         if int_resolution == value:
@@ -340,6 +343,12 @@ def set_cell(cells: list[list[str]], x: int, y: int, value: str):
         cells[y][x] = f"{value:.{precision}f}"
     else:
         cells[y][x] = value
+
+    # wipe color if blank
+    if value == '':
+        cell_name = convert_x_to_alpha_value(x) + str(y)
+        if cell_name in colors:
+            del colors[cell_name]
 
 def get_cell(cells: list[list[str]], x: int, y: int) -> str:
     if y < len(cells):
@@ -885,8 +894,8 @@ def REDO():
     wrapped_cell_names = copy.deepcopy(previous_state['wrapped_cell_names'])
     colors = copy.deepcopy(previous_state['colors'])
 
-def COPY(cell_names: list[str]):
-    global cells, equations, operators, current_cell
+def COPY(cell_names: list[str], cut: bool):
+    global cells, equations, operators, current_cell,m, colors
 
     WRITE_ACTION_FOR_UNDO()
 
@@ -902,14 +911,30 @@ def COPY(cell_names: list[str]):
 
     startx, starty = source_cells[0]
 
+    # collect current values
     last_x = 0
     last_y = 0
+    source_values = []
     for x, y in source_cells:
         # get value
         value = ''
         if y < len(cells) and x < len(cells[y]):
             value = cells[y][x]
         source_cell_name = convert_x_to_alpha_value(x) + str(y)
+        
+        r = g = b = None
+        if source_cell_name in colors:
+            r, g, b = colors[source_cell_name]
+
+        source_values.append([x, y, value, [r, g, b]])
+
+        # wipe cells if cutting
+        if cut:
+            set_cell(cells, x, y, '')
+
+
+    # set target values
+    for x, y, value, [r, g, b] in source_values:
 
         offset_from_start_x = x - startx
         offset_from_start_y = y - starty
@@ -925,28 +950,20 @@ def COPY(cell_names: list[str]):
         else:
             set_cell(cells, target_x, target_y, value)
 
+        if r != None:
+            colors[target_name] = [r, g, b]
+        elif target_name in colors:
+            del colors[target_name]
+
         last_x = target_x
         last_y = target_y
+
 
     set_current_cell(last_x, last_y)
          
 def CUT(cell_names: list[str]):
     global cells
-
-
-    COPY(cell_names)
-
-    cell_name, target_cell_name = cell_names
-
-    source_cells = []
-    if ':' in cell_name:
-        source_cells = convert_cell_range_to_targets(cell_name)
-    else:
-        x, y = convert_cell_name_to_x_y(cell_name)
-        source_cells.append([x, y])
-
-    for x, y in source_cells:
-        set_cell(cells, x, y, '')
+    COPY(cell_names, True)
 
 def WRAP(command):
     cell_name = command[2:]
@@ -1032,6 +1049,13 @@ def MOVE():
         APPLY_EQUATIONS()
         DISPLAY()
    
+def INSERT_ROW():
+    global current_cell, width
+    x, y = convert_cell_name_to_x_y(current_cell)
+
+    last_alpha = convert_x_to_alpha_value(width)
+
+    cut_command = ['a' + str(y) + ':' + '']
 
 recent_colors = []
 def PICK_COLOR():
@@ -1195,6 +1219,9 @@ while True:
                 ice_blue('w') + tekhelet(' - toogle wrap/extend on a cell')
             )
             print(
+                ice_blue('row') + tekhelet(' - insert row below')
+            )
+            print(
                 ice_blue('m') + tekhelet(' - move around with arrow keys or ijkl (hit enter to stop)')
             )
             print(
@@ -1237,7 +1264,7 @@ while True:
                 print()
         elif command.startswith("c "):
             cell_names = command[2:].split(' ')
-            COPY(cell_names)
+            COPY(cell_names, False)
             reprint = True
         elif command.startswith("x "):
             cell_names = command[2:].split(' ')
@@ -1257,6 +1284,8 @@ while True:
         elif command.startswith("w "):
             WRAP(command)
             reprint = True
+        elif command == 'row':
+            INSERT_ROW()
         elif command == 'm':
             MOVE()
         elif command == 'h':
