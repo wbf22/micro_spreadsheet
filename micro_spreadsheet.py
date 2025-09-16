@@ -4,6 +4,7 @@ import copy
 import os
 import re
 import signal
+import subprocess
 import sys
 import termios
 import tty
@@ -182,6 +183,9 @@ def is_cell_name(str: str) -> bool:
 
 
 def tokenize_equation(equation: str) -> list[str]:
+    
+    equation = " ".join(equation.split(" ")) # remove any double, triple spaces
+    
     last = 0
     tokens = []
     for i, c in enumerate(equation):
@@ -209,20 +213,21 @@ def is_equation(str: str) -> bool:
         float(str)
         return False
     except ValueError:
-        # split by operators
-        tokens = tokenize_equation(str)
-        number_regex = r'^\d*\.?\d+$'  # start, 0 or more digit, ., 1 or more digit, finish
-        for i, token in enumerate(tokens):
-            if token not in operators:
-                if not is_cell_name(token):
-                    is_number = re.search(number_regex, token)
-                    if not is_number:
-                        next = None if len(tokens) <= i+1 else tokens[i+1]
-                        is_function = token in functions and next == '('
-                        if not is_function:
-                            return False
+
+        return str.startswith("=")
+        # # split by operators
+        # tokens = tokenize_equation(str)
+        # number_regex = r'^\d*\.?\d+$'  # start, 0 or more digit, ., 1 or more digit, finish
+        # for i, token in enumerate(tokens):
+        #     if token not in operators:
+        #         if not is_cell_name(token):
+        #             is_number = re.search(number_regex, token)
+        #             if not is_number:
+        #                 next = None if len(tokens) <= i+1 else tokens[i+1]
+        #                 is_function = token in functions and next == '('
+        #                 if not is_function:
+        #                     return False
                 
-    return True
 
 def is_cell_range(str: str) -> bool:
      regex = r'^[a-zA-Z]+\d+:[a-zA-Z]+\d+$'
@@ -394,6 +399,11 @@ fd = None
 def handle_exit(signum, frame):
     if old_settings != None and fd != None:
         termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
+
+    # Re-enable line wrapping
+    print("\033[?7h")
+
+
     sys.exit(0)
 signal.signal(signal.SIGINT, handle_exit)
 signal.signal(signal.SIGTERM, handle_exit)
@@ -418,6 +428,9 @@ def input_f():
             ch = sys.stdin.read(1)
             if ch == '\n' or ch == '\r':
                 break
+
+            if ch == '\t':
+                return '\t'
 
             if not escaped:
                 if ch == '\x7f':
@@ -897,6 +910,16 @@ def REDO():
 def COPY(cell_names: list[str], cut: bool):
     global cells, equations, operators, current_cell,m, colors
 
+    # x a0:b3 a1
+
+    '''
+   |       a       |              b              |
+ 0 | dogs and bats | cats                        |
+ 1 |            11 |                           3 |
+ 2 | =a1*b1        | =a1*b1+77                   |
+ 3 | =avg(a1:a2)   | this is a super long string |
+    '''
+
     WRITE_ACTION_FOR_UNDO()
 
     cell_name, target_cell_name = cell_names
@@ -934,6 +957,8 @@ def COPY(cell_names: list[str], cut: bool):
 
 
     # set target values
+    new_equations = copy.deepcopy(equations)
+    inserts = set()
     for x, y, value, [r, g, b] in source_values:
 
         offset_from_start_x = x - startx
@@ -943,13 +968,18 @@ def COPY(cell_names: list[str], cut: bool):
         target_y = target_start_y + offset_from_start_y
 
         # modify if equation
+        source_cell_name = convert_x_to_alpha_value(x) + str(y)
         target_name = convert_x_to_alpha_value(target_x) + str(target_y)
         if source_cell_name in equations:
             value = modify_equation(source_cell_name, x, y, target_x, target_y)
-            equations[target_name] = value
+            if source_cell_name not in inserts:
+                del new_equations[source_cell_name]
+            new_equations[target_name] = value
+            inserts.add(target_name)
         else:
             set_cell(cells, target_x, target_y, value)
 
+        # copy colors
         if r != None:
             colors[target_name] = [r, g, b]
         elif target_name in colors:
@@ -957,6 +987,8 @@ def COPY(cell_names: list[str], cut: bool):
 
         last_x = target_x
         last_y = target_y
+
+    equations = new_equations
 
 
     set_current_cell(last_x, last_y)
@@ -1050,12 +1082,48 @@ def MOVE():
         DISPLAY()
    
 def INSERT_ROW():
-    global current_cell, width
+    global current_cell, width, height
     x, y = convert_cell_name_to_x_y(current_cell)
 
     last_alpha = convert_x_to_alpha_value(width)
 
-    cut_command = ['a' + str(y) + ':' + '']
+    cut_command = ['a' + str(y) + ':' + last_alpha + str(height), 'a' + str(y+1)]
+
+    CUT(cut_command)
+
+def INSERT_COL():
+    global current_cell, width, height
+    x, y = convert_cell_name_to_x_y(current_cell)
+    curr_alpha = convert_x_to_alpha_value(x)
+    next_alpha = convert_x_to_alpha_value(x+1)
+
+    last_alpha = convert_x_to_alpha_value(width)
+
+    cut_command = [curr_alpha + '0' + ':' + last_alpha + str(height), next_alpha + '0']
+
+    CUT(cut_command)
+
+def DELETE_ROW():
+    global current_cell, width, height
+    x, y = convert_cell_name_to_x_y(current_cell)
+
+    last_alpha = convert_x_to_alpha_value(width)
+
+    cut_command = ['a' + str(y+1) + ':' + last_alpha + str(height), 'a' + str(y)]
+
+    CUT(cut_command)
+
+def DELETE_COL():
+    global current_cell, width, height
+    x, y = convert_cell_name_to_x_y(current_cell)
+    curr_alpha = convert_x_to_alpha_value(x)
+    next_alpha = convert_x_to_alpha_value(x+1)
+
+    last_alpha = convert_x_to_alpha_value(width)
+
+    cut_command = [next_alpha + '0' + ':' + last_alpha + str(height), curr_alpha + '0']
+
+    CUT(cut_command)
 
 recent_colors = []
 def PICK_COLOR():
@@ -1179,6 +1247,11 @@ def PICK_COLOR():
     return r, g, b
 
 
+
+# Disable line wrapping
+print("\033[?7l")
+
+
 # do equations and diaply csv
 LOAD()
 APPLY_EQUATIONS()
@@ -1201,10 +1274,10 @@ while True:
                 ice_blue('i <cell>') + tekhelet(' - inspect the equation or value of a cell (or display with equations if no cell is provided)')
             )
             print(
-                ice_blue('c <cell> ') + tekhelet(' - copy a cell(s)')
+                ice_blue('c <cell or range> <cell> ') + tekhelet(' - copy a cell(s)')
             )
             print(
-                ice_blue('x <cell> ') + tekhelet(' - cut a cell(s)')
+                ice_blue('x <cell or range> <cell> ') + tekhelet(' - cut a cell(s)')
             )
             print(
                 ice_blue('z') + tekhelet(' - undo')
@@ -1216,13 +1289,25 @@ while True:
                 ice_blue('color') + tekhelet(' - set the color for a cell')
             )
             print(
-                ice_blue('w') + tekhelet(' - toogle wrap/extend on a cell')
+                ice_blue('w <cell or range>') + tekhelet(' - toogle wrap/extend on a cell')
             )
             print(
-                ice_blue('row') + tekhelet(' - insert row below')
+                ice_blue('row') + tekhelet(' - insert row above')
+            )
+            print(
+                ice_blue('col') + tekhelet(' - insert col before')
+            )
+            print(
+                ice_blue('drow') + tekhelet(' - delete current row')
+            )
+            print(
+                ice_blue('dcol') + tekhelet(' - delete current col')
             )
             print(
                 ice_blue('m') + tekhelet(' - move around with arrow keys or ijkl (hit enter to stop)')
+            )
+            print(
+                ice_blue('m <cell>') + tekhelet(' - to move to a certain cell')
             )
             print(
                 ice_blue('h') + tekhelet(' - show commands')
@@ -1232,6 +1317,12 @@ while True:
             )
             print(
                 ice_blue('s') + tekhelet(' - save file')
+            )
+            print(
+                ice_blue('sas') + tekhelet(' - save file as')
+            )
+            print(
+                ice_blue('<tab>') + tekhelet(' - move right')
             )
             print(
                 ice_blue('q') + tekhelet(' - quit')
@@ -1280,14 +1371,36 @@ while True:
             reprint = True
             r,g,b = PICK_COLOR()
             colors[current_cell] = [r,g,b]
-
         elif command.startswith("w "):
             WRAP(command)
             reprint = True
         elif command == 'row':
+            reprint = True
+            x, y = convert_cell_name_to_x_y(current_cell)
             INSERT_ROW()
+            set_current_cell(x, y-1)
+        elif command == 'col':
+            reprint = True
+            x, y = convert_cell_name_to_x_y(current_cell)
+            INSERT_COL()
+            set_current_cell(x, y-1)
+        elif command == 'drow':
+            reprint = True
+            x, y = convert_cell_name_to_x_y(current_cell)
+            DELETE_ROW()
+            set_current_cell(x, y-1)
+        elif command == 'dcol':
+            reprint = True
+            x, y = convert_cell_name_to_x_y(current_cell)
+            DELETE_COL()
+            set_current_cell(x, y-1)
         elif command == 'm':
             MOVE()
+        elif command.startswith('m '):
+            reprint = True
+            cell_name = command[2:]
+            x, y = convert_cell_name_to_x_y(cell_name)
+            set_current_cell(x, y-1)
         elif command == 'h':
             show_instructions = True
         elif command == 'l':
@@ -1299,6 +1412,13 @@ while True:
             SAVE()
         elif command == 'q' or command == 'quit':
             break
+        elif command == '\t':
+            reprint = True
+            x, y = convert_cell_name_to_x_y(current_cell)
+            set_current_cell(x+1, y-1)
+        elif command == 'sas':
+            FILE = None
+            SAVE()
         else:
             show_instructions = not NO_COMMANDS
             reprint = True
@@ -1306,8 +1426,8 @@ while True:
             # add to stack
             WRITE_ACTION_FOR_UNDO()
 
-            if '=' in command:
-                cell_name, value = command.split('=')
+            if '=' in command and not command.startswith('='):
+                cell_name, value = command.split('=', 1)
 
                 # get input cell(s)
                 target_cells = []
@@ -1320,8 +1440,8 @@ while True:
                 # set cells
                 for x, y in target_cells:
                     target_cell_name = convert_x_to_alpha_value(x) + str(y)
-                    if is_equation(value.replace(" ", "")):
-                        equations[target_cell_name] = value.replace(" ", "")
+                    if is_equation(value):
+                        equations[target_cell_name] = value[1:].replace(" ", "") # remove equals sign and spaces
                     else:
                         if target_cell_name in equations: del equations[target_cell_name]
                         set_cell(cells, x, y, value)
@@ -1332,8 +1452,8 @@ while True:
             else:
                 value = command
                 x, y = convert_cell_name_to_x_y(current_cell)
-                if is_equation(value.replace(" ", "")):
-                    equations[current_cell] = value.replace(" ", "")
+                if is_equation(value):
+                    equations[current_cell] = value[1:].replace(" ", "") # remove equals sign and spaces
                 else:
                     if current_cell in equations: del equations[current_cell]
                     set_cell(cells, x, y, value)

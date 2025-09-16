@@ -5,15 +5,15 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "Python Debugger: Current File with Arguments",
+            "name": "CSV",
             "type": "debugpy",
             "request": "launch",
             "program": "micro_spreadsheet.py",
             "console": "integratedTerminal",
             // "args": "-c"
             // "args": "brandon_and_some_ashlyn.csv"
-            "args": "mortgage_payoff.csv"
-            // "args": "test.csv"
+            // "args": "mortgage_payoff.csv"
+            "args": "test.csv"
             // "args": ""
             // "args": "-h"
         }
