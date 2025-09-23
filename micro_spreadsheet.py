@@ -190,16 +190,29 @@ def tokenize_equation(equation: str) -> list[str]:
     tokens = []
     for i, c in enumerate(equation):
         if c in operators:
+            # capture token before the operator
             last_is_op = False if i-1 == 0 else equation[i-1] in operators
             if not last_is_op:
-                value = equation[last:i]
+                value = equation[last:i].replace(" ", "")
                 if value != '':
                     tokens.append(value)
+            # get the operator as token
             tokens.append(c)
             last = i + 1
+        elif c == ' ':
+            # ignore space between operators and tokens
+            last_is_op = False if i-1 == 0 else equation[i-1] in operators
+            next_is_op = False if i+1 > len(equation) else equation[i+1] in operators
+
+            # otherwise treat as a token
+            if not last_is_op and not next_is_op:
+                value = equation[last:i].replace(" ", "")
+                if value != '':
+                    tokens.append(value)
+
 
     if last != len(equation):
-        tokens.append(equation[last:])
+        tokens.append(equation[last:].replace(" ", ""))
 
     return tokens
 
@@ -214,19 +227,22 @@ def is_equation(str: str) -> bool:
         return False
     except ValueError:
 
-        return str.startswith("=")
-        # # split by operators
-        # tokens = tokenize_equation(str)
-        # number_regex = r'^\d*\.?\d+$'  # start, 0 or more digit, ., 1 or more digit, finish
-        # for i, token in enumerate(tokens):
-        #     if token not in operators:
-        #         if not is_cell_name(token):
-        #             is_number = re.search(number_regex, token)
-        #             if not is_number:
-        #                 next = None if len(tokens) <= i+1 else tokens[i+1]
-        #                 is_function = token in functions and next == '('
-        #                 if not is_function:
-        #                     return False
+        # return str.startswith("=")
+
+        # split by operators
+        tokens = tokenize_equation(str)
+        number_regex = r'^\d*\.?\d+$'  # start, 0 or more digit, ., 1 or more digit, finish
+        for i, token in enumerate(tokens):
+            if token not in operators:
+                if not is_cell_name(token):
+                    is_number = re.search(number_regex, token)
+                    if not is_number:
+                        next = None if len(tokens) <= i+1 else tokens[i+1]
+                        is_function = token in functions and next == '('
+                        if not is_function:
+                            return False
+                        
+        return True
                 
 
 def is_cell_range(str: str) -> bool:
@@ -386,12 +402,20 @@ def modify_equation(source_cell_name: str, source_x: int, source_y: int, target_
 
     return ''.join(tokens)
 
-def set_current_cell(last_x: int, last_y: int):
+def set_current_cell(last_x: int, last_y: int, return_type: str = '\n'):
     global current_cell
-    current_cell = convert_x_to_alpha_value(last_x) + str(last_y+1)
-    current_value = get_cell(cells, last_x, last_y+1)
+    x = last_x
+    y = last_y
+    if return_type == '\n':
+        y += 1
+    elif return_type == '\t':
+        x += 1
+
+    current_cell = convert_x_to_alpha_value(x) + str(y)
+    current_value = get_cell(cells, x, y)
     current_value = '' if current_value == None else current_value
-    set_cell(cells, last_x, last_y+1, current_value)
+    set_cell(cells, x, y, current_value)
+
     
 
 old_settings = None
@@ -411,6 +435,8 @@ signal.signal(signal.SIGTERM, handle_exit)
 def input_f():
     global command_stack, old_settings, fd
 
+    return_type = '\n'
+
     sys.stdout.flush()
 
     fd = sys.stdin.fileno()
@@ -427,10 +453,12 @@ def input_f():
         while ch != '\n' and ch != '\r':
             ch = sys.stdin.read(1)
             if ch == '\n' or ch == '\r':
+                return_type = '\n'
                 break
 
             if ch == '\t':
-                return '\t'
+                return_type = '\t'
+                break
 
             if not escaped:
                 if ch == '\x7f':
@@ -455,18 +483,30 @@ def input_f():
             elif escaped:
                 ch = sys.stdin.read(1)
                 if ch == 'D':
+                    if len(chars) == 0:
+                        return "<LEFT>", ''
+
                     if cursor_pos > 0:
                         cursor_pos -= 1
                 elif ch == 'C':
+                    if len(chars) == 0:
+                        return "<RIGHT>", ''
+                
                     if cursor_pos < len(total_in):
                         cursor_pos += 1
                 elif ch == 'A':
+                    if len(chars) == 0:
+                        return "<UP>", ''
+                
                     if command_stack_position > 0:
                         command_stack_position -= 1
                     if len(command_stack) > command_stack_position:
                         chars = [c for c in command_stack[command_stack_position]]
                         cursor_pos = len(chars)
                 elif ch == 'B':
+                    if len(chars) == 0:
+                        return "<DOWN>", ''
+                
                     if command_stack_position < len(command_stack)-1:
                         command_stack_position += 1
                         chars = [c for c in command_stack[command_stack_position]]
@@ -494,7 +534,7 @@ def input_f():
     # print('test')
     # print('test')
 
-    return ''.join(chars)
+    return ''.join(chars), return_type
 
 
 
@@ -1332,7 +1372,7 @@ while True:
             )
             show_instructions = False
         print(mint_green('$: '), end='')
-        command = input_f()
+        command, return_type = input_f()
         command_stack.append(command)
         
         reprint = False
@@ -1419,6 +1459,28 @@ while True:
         elif command == 'sas':
             FILE = None
             SAVE()
+        elif command == "<LEFT>":
+            command_stack.pop()
+            x, y = convert_cell_name_to_x_y(current_cell)
+            if x > 0:
+                set_current_cell(x-1, y, '')
+            reprint = True
+        elif command == "<RIGHT>":
+            command_stack.pop()
+            x, y = convert_cell_name_to_x_y(current_cell)
+            set_current_cell(x+1, y, '')
+            reprint = True
+        elif command == "<UP>":
+            command_stack.pop()
+            x, y = convert_cell_name_to_x_y(current_cell)
+            if y > 0:
+                set_current_cell(x, y-1, '')
+            reprint = True
+        elif command == "<DOWN>":
+            command_stack.pop()
+            x, y = convert_cell_name_to_x_y(current_cell)
+            set_current_cell(x, y+1, '')
+            reprint = True
         else:
             show_instructions = not NO_COMMANDS
             reprint = True
@@ -1453,12 +1515,13 @@ while True:
                 value = command
                 x, y = convert_cell_name_to_x_y(current_cell)
                 if is_equation(value):
-                    equations[current_cell] = value[1:].replace(" ", "") # remove equals sign and spaces
+                    # equations[current_cell] = value[1:].replace(" ", "") # remove equals sign and spaces
+                    equations[current_cell] = value.replace(" ", "") # remove spaces
                 else:
                     if current_cell in equations: del equations[current_cell]
                     set_cell(cells, x, y, value)
                 
-                set_current_cell(x, y)
+                set_current_cell(x, y, return_type)
 
 
         if reprint:
