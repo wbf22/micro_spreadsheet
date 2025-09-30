@@ -844,6 +844,9 @@ def LOAD():
                 equations[target] = equation
 
 
+    if len(cells) == 0:
+        cells.append([''])
+
     width = len(cells[0])
     for row in cells:
         if len(row) > width: width = len(row)
