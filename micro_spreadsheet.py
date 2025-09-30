@@ -837,6 +837,10 @@ def LOAD():
                 colors[target] = [int(r), int(g), int(b)]
                 recent_colors.append([r,g,b])
 
+            elif line.startswith('<meta> wrap '):
+                target = line.split('<meta> wrap ')[1]
+                wrapped_cell_names.add(target)
+
             elif line.startswith('<meta>'):
                 equation = line.split('<meta>')[1]
                 equation = equation.replace(' ', '')
@@ -853,7 +857,7 @@ def LOAD():
     height = len(cells)
 
 def SAVE():
-    global cells, FILE, equations
+    global cells, FILE, equations, wrapped_cell_names
 
     if FILE == None or FILE == '': 
         print(mint_green('file path: '), end='')
@@ -881,6 +885,11 @@ def SAVE():
             file.write(target_cell_name)
             file.write('=')
             file.write(str(r) + ',' + str(g) + ',' + str(b))
+            file.write('\n')
+
+        for target_cell_name in wrapped_cell_names:
+            file.write('<meta> wrap ')
+            file.write(target_cell_name)
             file.write('\n')
 
     
