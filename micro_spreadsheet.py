@@ -1012,7 +1012,7 @@ def COPY(cell_names: list[str], cut: bool):
         target_name = convert_x_to_alpha_value(target_x) + str(target_y)
         if source_cell_name in equations:
             value = modify_equation(source_cell_name, x, y, target_x, target_y)
-            if source_cell_name not in inserts:
+            if source_cell_name not in inserts and cut:
                 del new_equations[source_cell_name]
             new_equations[target_name] = value
             inserts.add(target_name)
