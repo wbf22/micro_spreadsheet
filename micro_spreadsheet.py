@@ -842,7 +842,7 @@ def DISPLAY(show_equations=False):
 
         
 
-    y_range = min(terminal_height + rows_skipped-1, len(display))
+    y_range = min(terminal_height + rows_skipped-1, len(display)+1)
     row_ys = []
     if rows_skipped == 0:
         row_ys = [*range(rows_skipped, y_range)]
@@ -850,6 +850,8 @@ def DISPLAY(show_equations=False):
         row_ys = [0, *range(rows_skipped, y_range-1)]
 
     for y in row_ys:
+        if y >= len(display): continue
+
         skipped = 0
         i = 0
         while skipped < cols_skipped:
