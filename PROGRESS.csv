@@ -1,0 +1,112 @@
+,,,
+,TASK,PREDICTION,ACTUAL
+,loading player edits on enetering chunk,,
+,character limbs and animations,,
+,magic,,
+,world in space spawning,,
+,fix trees and add more assets,,
+,spirit realm,,
+,bone breaking and injuries + healing,,
+,dying, ghosting back to body, spawn points,,
+,sound design,,
+,vehicle building,,
+,weapon building,,
+,space travel,,
+,choose music,,
+,alien generation,,
+,intelligent alien dialog and behavior,,
+,traveling wizards,,
+,building gen,,
+,,,
+,benevolent gods,,
+,good and bad demi-gods,,
+,clothe making,,
+,impact craters,,
+,volcanos,,
+,musical instruments,,
+,in game wiki,,
+,have kids with npc,,
+,reborn as a baby,,
+,,,
+DONE,block rotations based on look direction,normal,1 week
+,basic building,normal,1 week
+,player stuck fixing,normal,1 day
+,optimize terrain loading,hard,1 week
+,switching to linux and getting setup again,hard,5 weeks
+,erosion,hard,13 weeks
+,tree rotation,easy,4 weeks
+,block resizing,normal,1 week
+,trunk generation,normal,2 weeks
+,switch to VSCode,hard,1 week
+,Coordinate Tools,hard,1 week
+,Downblock Efficiency,normal,2 weeks
+,Branch Generation,easy,6 weeks
+,Tree Placement,normal,2 weeks
+,Player Movement,normal,3 weeks
+,Load Chunk on Player Position,hard,4 weeks
+,Server Sockets and Infrastructure,hard,3 weeks
+,Server Block Placement,normal,3 weeks
+,Server Login,normal,2 weeks
+,Server Ping,easy,1 week
+,Server Captcha,hard,1 week
+,Server Register,easy,1 week
+,Server Stop,easy,1 week
+,river gen,normal,2 weeks
+,fluid simulations,hard,2 weeks
+,switch to godot,very hard,4 weeks
+<meta> color b1=98,13,115
+<meta> color c1=98,13,115
+<meta> color d1=98,13,115
+<meta> color a30=98,13,115
+<meta> color c30=158,145,0
+<meta> color c31=158,145,0
+<meta> color c32=158,145,0
+<meta> color c33=128,74,0
+<meta> color c34=128,74,0
+<meta> color c35=128,74,0
+<meta> color c36=13,115,30
+<meta> color c37=158,145,0
+<meta> color c38=158,145,0
+<meta> color c39=128,74,0
+<meta> color c40=128,74,0
+<meta> color c41=158,145,0
+<meta> color c42=13,115,30
+<meta> color c43=158,145,0
+<meta> color c44=158,145,0
+<meta> color c45=128,74,0
+<meta> color c46=128,74,0
+<meta> color c47=158,145,0
+<meta> color c48=158,145,0
+<meta> color c49=13,115,30
+<meta> color c50=128,74,0
+<meta> color c51=13,115,30
+<meta> color c52=13,115,30
+<meta> color d30=13,115,30
+<meta> color c53=158,145,0
+<meta> color c54=128,74,0
+<meta> color c55=115,13,13
+<meta> color d31=13,115,30
+<meta> color d32=13,115,30
+<meta> color d33=13,115,30
+<meta> color d34=128,74,0
+<meta> color d35=98,13,115
+<meta> color d36=128,74,0
+<meta> color d37=13,115,30
+<meta> color d38=158,145,0
+<meta> color d39=13,115,30
+<meta> color d40=13,115,30
+<meta> color d41=158,145,0
+<meta> color d42=115,13,13
+<meta> color d43=158,145,0
+<meta> color d44=158,145,0
+<meta> color d45=128,74,0
+<meta> color d46=158,145,0
+<meta> color d47=158,145,0
+<meta> color d48=158,145,0
+<meta> color d49=13,115,30
+<meta> color d50=13,115,30
+<meta> color d51=13,115,30
+<meta> color d52=13,115,30
+<meta> color d53=158,145,0
+<meta> color d54=158,145,0
+<meta> color d55=128,74,0

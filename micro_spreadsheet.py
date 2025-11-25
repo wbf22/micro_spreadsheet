@@ -837,17 +837,17 @@ def DISPLAY(show_equations=False):
         rows_skipped+=1
     if cols_skipped > 0:
         cols_skipped+=1
-    if rows_skipped > 0:
-        rows_skipped+=1
+    # if rows_skipped > 0:
+    #     rows_skipped+=1
 
         
 
-    y_range = min(terminal_height + rows_skipped, len(display))
+    y_range = min(terminal_height + rows_skipped-1, len(display))
     row_ys = []
     if rows_skipped == 0:
         row_ys = [*range(rows_skipped, y_range)]
     else:
-        row_ys = [0, *range(rows_skipped, y_range)]
+        row_ys = [0, *range(rows_skipped, y_range-1)]
 
     for y in row_ys:
         skipped = 0
