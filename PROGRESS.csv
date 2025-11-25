@@ -1,59 +1,59 @@
-,,,
-,TASK,PREDICTION,ACTUAL
-,loading player edits on enetering chunk,,
-,character limbs and animations,,
-,magic,,
-,world in space spawning,,
-,fix trees and add more assets,,
-,spirit realm,,
-,bone breaking and injuries + healing,,
-,dying, ghosting back to body, spawn points,,
-,sound design,,
-,vehicle building,,
-,weapon building,,
-,space travel,,
-,choose music,,
-,alien generation,,
-,intelligent alien dialog and behavior,,
-,traveling wizards,,
-,building gen,,
-,,,
-,benevolent gods,,
-,good and bad demi-gods,,
-,clothe making,,
-,impact craters,,
-,volcanos,,
-,musical instruments,,
-,in game wiki,,
-,have kids with npc,,
-,reborn as a baby,,
-,,,
-DONE,block rotations based on look direction,normal,1 week
-,basic building,normal,1 week
-,player stuck fixing,normal,1 day
-,optimize terrain loading,hard,1 week
-,switching to linux and getting setup again,hard,5 weeks
-,erosion,hard,13 weeks
-,tree rotation,easy,4 weeks
-,block resizing,normal,1 week
-,trunk generation,normal,2 weeks
-,switch to VSCode,hard,1 week
-,Coordinate Tools,hard,1 week
-,Downblock Efficiency,normal,2 weeks
-,Branch Generation,easy,6 weeks
-,Tree Placement,normal,2 weeks
-,Player Movement,normal,3 weeks
-,Load Chunk on Player Position,hard,4 weeks
-,Server Sockets and Infrastructure,hard,3 weeks
-,Server Block Placement,normal,3 weeks
-,Server Login,normal,2 weeks
-,Server Ping,easy,1 week
-,Server Captcha,hard,1 week
-,Server Register,easy,1 week
-,Server Stop,easy,1 week
-,river gen,normal,2 weeks
-,fluid simulations,hard,2 weeks
-,switch to godot,very hard,4 weeks
+,,,,
+,TASK,PREDICTION,ACTUAL,
+,loading player edits on enetering chunk,,,
+,character limbs and animations,,,
+,magic,,,
+,world in space spawning,,,
+,fix trees and add more assets,,,
+,spirit realm,,,
+,bone breaking and injuries + healing,,,
+,"dying, ghosting back to body, spawn points",,,
+,sound design,,,
+,vehicle building,,,
+,weapon building,,,
+,space travel,,,
+,choose music,,,
+,alien generation,,,
+,intelligent alien dialog and behavior,,,
+,traveling wizards,,,
+,building gen,,,
+,,,,
+,benevolent gods,,,
+,good and bad demi-gods,,,
+,clothe making,,,
+,impact craters,,,
+,volcanos,,,
+,musical instruments,,,
+,in game wiki,,,
+,have kids with npc,,,
+,reborn as a baby,,,
+,,,,
+DONE,block rotations based on look direction,normal,1 week,
+,basic building,normal,1 week,
+,player stuck fixing,normal,1 day,
+,optimize terrain loading,hard,1 week,
+,switching to linux and getting setup again,hard,5 weeks,
+,erosion,hard,13 weeks,
+,tree rotation,easy,4 weeks,
+,block resizing,normal,1 week,
+,trunk generation,normal,2 weeks,
+,switch to VSCode,hard,1 week,
+,Coordinate Tools,hard,1 week,
+,Downblock Efficiency,normal,2 weeks,
+,Branch Generation,easy,6 weeks,
+,Tree Placement,normal,2 weeks,
+,Player Movement,normal,3 weeks,
+,Load Chunk on Player Position,hard,4 weeks,
+,Server Sockets and Infrastructure,hard,3 weeks,
+,Server Block Placement,normal,3 weeks,
+,Server Login,normal,2 weeks,
+,Server Ping,easy,1 week,
+,Server Captcha,hard,1 week,
+,Server Register,easy,1 week,
+,Server Stop,easy,1 week,
+,river gen,normal,2 weeks,
+,fluid simulations,hard,2 weeks,
+,switch to godot,very hard,4 weeks,
 <meta> color b1=98,13,115
 <meta> color c1=98,13,115
 <meta> color d1=98,13,115

@@ -338,7 +338,7 @@ equations = {}
 colors = {}
 wrapped_cell_names = set()
 current_cell = 'a0'
-selected_cells = ["", ""]
+selected_cells = []
 clip_board = []
 clip_board_operation = ""
 is_selecting = False
@@ -1512,11 +1512,16 @@ while True:
         # selecting stuff
         if return_type == "<SHIFT>" and not is_selecting:
             is_selecting = True
-            selected_cells[0] = current_cell
-            selected_cells[1] = current_cell
+            selected_cells.append(current_cell)
+            selected_cells.append(current_cell)
         elif is_selecting and return_type != "<SHIFT>" and command != "c" and command != "x":
             is_selecting = False
             selected_cells.clear()
+
+        # if your shift moving update selected cells
+        # if you move or do another command with shift clear selected cells
+        # if copy is hit and selected cells is set, set clipboard and clear selected cells
+        # if copy is hit and selected cells isnt' set, set clipbaord to current cell
 
         
         reprint = False
@@ -1543,7 +1548,11 @@ while True:
             reprint = True
         elif command == "c":
             is_selecting = False
-            clip_board = [selected_cells[0], selected_cells[1]]
+            if len(selected_cells) == 2:
+                clip_board = [selected_cells[0], selected_cells[1]]
+                selected_cells.clear()
+            else:
+                clip_board = [current_cell, current_cell]
             clip_board_operation = "c"
             reprint = True
         elif command.startswith("x "):
@@ -1552,7 +1561,11 @@ while True:
             reprint = True
         elif command == "x":
             is_selecting = False
-            clip_board = [selected_cells[0], selected_cells[1]]
+            if len(selected_cells) == 2:
+                clip_board = [selected_cells[0], selected_cells[1]]
+                selected_cells.clear()
+            else:
+                clip_board = [current_cell, current_cell]
             clip_board_operation = "x"
             reprint = True
         elif command == 'v':
@@ -1561,7 +1574,6 @@ while True:
                 COPY(cell_names, False)
             elif clip_board_operation == "x":
                 CUT(cell_names)
-            clip_board_operation = ""
             reprint = True
         elif command == 'z':
             reprint = True
