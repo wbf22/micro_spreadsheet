@@ -3,6 +3,7 @@ import argparse
 import copy
 import os
 import re
+import shutil
 import signal
 import subprocess
 import sys
@@ -335,6 +336,10 @@ equations = {}
 colors = {}
 wrapped_cell_names = set()
 current_cell = 'a0'
+selected_cells = ["", ""]
+clip_board = []
+clip_board_operation = ""
+is_selecting = False
 
 actions = []
 undone_actions = []
@@ -459,7 +464,6 @@ def input_f():
             if ch == '\t':
                 return_type = '\t'
                 break
-
             if not escaped:
                 if ch == '\x7f':
                     if len(chars) > 0:
@@ -482,21 +486,33 @@ def input_f():
                     cursor_pos += 1
             elif escaped:
                 ch = sys.stdin.read(1)
+
+                # check for shifts
+                if ch != 'D' and ch != 'C' and ch != 'A' and ch != 'B':
+                    ch = sys.stdin.read(1)
+                    ch = sys.stdin.read(1)
+                    ch = sys.stdin.read(1)
+                    return_type = "<SHIFT>"
+                else:
+                    return_type = ''
+
+
+                # arrow direction
                 if ch == 'D':
                     if len(chars) == 0:
-                        return "<LEFT>", ''
+                        return "<LEFT>", return_type
 
                     if cursor_pos > 0:
                         cursor_pos -= 1
                 elif ch == 'C':
                     if len(chars) == 0:
-                        return "<RIGHT>", ''
+                        return "<RIGHT>", return_type
                 
                     if cursor_pos < len(total_in):
                         cursor_pos += 1
                 elif ch == 'A':
                     if len(chars) == 0:
-                        return "<UP>", ''
+                        return "<UP>", return_type
                 
                     if command_stack_position > 0:
                         command_stack_position -= 1
@@ -505,7 +521,7 @@ def input_f():
                         cursor_pos = len(chars)
                 elif ch == 'B':
                     if len(chars) == 0:
-                        return "<DOWN>", ''
+                        return "<DOWN>", return_type
                 
                     if command_stack_position < len(command_stack)-1:
                         command_stack_position += 1
@@ -673,7 +689,8 @@ def DISPLAY(show_equations=False):
     global cells, width, height, current_cell, colors
 
     # clear screen
-    print("\033[2J\033[H")
+    print("\033[2J\033[H", "")
+    sys.stdout.flush()
 
     # determine wrap properties
 
@@ -707,33 +724,39 @@ def DISPLAY(show_equations=False):
     # column labels
     display = []
     row_label_space = len(str(height))
-    display.append(print_cadet_grey(' ' * (row_label_space+2) + '|'))
+    row_display = []
+    row_display.append(print_cadet_grey(' ' * (row_label_space+2) + '|'))
     for i in range(width):
         alpha_value = convert_x_to_alpha_value(i)
         spaces = column_widths[i] - len(alpha_value)
         first_spaces = spaces // 2 + 1
         second_spaces = spaces - first_spaces + 2
-        display.append(" " * first_spaces)
-        display.append(light_green(alpha_value[:column_widths[i]]))
-        display.append(" " * second_spaces)
-        display.append(print_cadet_grey("|"))
-    display.append('\n')
+        row_display.append(" " * first_spaces)
+        row_display.append(light_green(alpha_value[:column_widths[i]]))
+        row_display.append(" " * second_spaces)
+        row_display.append(print_cadet_grey("|"))
+    display.append(''.join(row_display))
 
 
     current_x, current_y = convert_cell_name_to_x_y(current_cell)
+    selected_start_x, selected_start_y, selected_end_x, selected_end_y = -1, -1, -1, -1
+    if len(selected_cells) == 2 and is_selecting:
+        selected_start_x, selected_start_y = convert_cell_name_to_x_y(selected_cells[0])
+        selected_end_x, selected_end_y = convert_cell_name_to_x_y(selected_cells[1])
 
     # rows
     for y, row in enumerate(cells):
 
         
+        row_display = []
         for cell_h in range(row_heights[y]):
             # row label
-            display.append(' ')
+            row_display.append(' ')
             row_num_str = str(y)
-            if cell_h == 0: display.append(indigo(row_num_str))
-            else: display.append(' ' * len(row_num_str))
-            display.append(' ' * (row_label_space - len(row_num_str)))
-            display.append(print_cadet_grey(' |'))
+            if cell_h == 0: row_display.append(indigo(row_num_str))
+            else: row_display.append(' ' * len(row_num_str))
+            row_display.append(' ' * (row_label_space - len(row_num_str)))
+            row_display.append(print_cadet_grey(' |'))
 
             # cells
             for x, value in enumerate(row):
@@ -774,20 +797,76 @@ def DISPLAY(show_equations=False):
 
 
                 if x == current_x and y == current_y:
-                    display.append(
+                    row_display.append(
+                        ''.join([lighter_background(s) for s in cell_contents])
+                    )
+                elif x >= selected_start_x and x <= selected_end_x and y >= selected_start_y and y <= selected_end_y:
+                    row_display.append(
                         ''.join([lighter_background(s) for s in cell_contents])
                     )
                 else:
-                    display.append(
+                    row_display.append(
                         ''.join(cell_contents)
                     )
 
-                display.append(print_cadet_grey('|'))
+                row_display.append(print_cadet_grey('|'))
 
-            display.append('\n')
+            display.append(''.join(row_display))
 
 
-    print(''.join(display))
+    # print('\n'.join(display))
+
+    # print display adjusted to fit in view 
+    size = shutil.get_terminal_size()
+    terminal_width = size.columns
+    terminal_height = size.lines
+    current_cell_terminal_x = sum([column_widths[i]+3 for i in range(0, current_x+1)]) + row_label_space+2
+    current_cell_terminal_y = sum([row_heights[i] for i in range(0, current_y+1)]) + 3
+    x_adjustment = 0
+    cols_skipped = 0
+    while current_cell_terminal_x - x_adjustment > terminal_width:
+        x_adjustment += column_widths[cols_skipped]
+        cols_skipped+=1
+    y_adjustment = 0
+    rows_skipped = 0
+    while current_cell_terminal_y - y_adjustment > terminal_height:
+        y_adjustment += row_heights[rows_skipped]
+        rows_skipped+=1
+    if cols_skipped > 0:
+        cols_skipped+=1
+
+    y_range = min(terminal_height + rows_skipped, len(display))
+    for y in range(rows_skipped, y_range):
+        skipped = 0
+        i = 0
+        while skipped < cols_skipped:
+            if display[y][i] == "|":
+                skipped+=1
+            i+=1
+
+        x_range = i
+        if cols_skipped != 0:
+            while skipped < current_x+2:
+                if display[y][x_range] == "|":
+                    skipped+=1
+                x_range+=1
+
+            # row label
+            row_label = []
+            row_label.append(' ')
+            row_num_str = str(y+rows_skipped)
+            if y != rows_skipped: row_label.append(indigo(row_num_str))
+            else: row_label.append(' ' * (len(row_num_str)))
+            row_label.append(' ' * (row_label_space - len(row_num_str)))
+            row_label.append(print_cadet_grey(' |'))
+            print("".join(row_label), end="")
+
+        else: 
+            x_range = len(display[y]) - i
+
+        print(display[y][i:i+x_range])
+        
+
 
 def get_current_contents(cell_name, x, y):
     global cells, equations
@@ -1044,7 +1123,7 @@ def COPY(cell_names: list[str], cut: bool):
 
 
     set_current_cell(last_x, last_y)
-         
+
 def CUT(cell_names: list[str]):
     global cells
     COPY(cell_names, True)
@@ -1386,6 +1465,16 @@ while True:
         print(mint_green('$: '), end='')
         command, return_type = input_f()
         command_stack.append(command)
+
+        # selecting stuff
+        if return_type == "<SHIFT>" and not is_selecting:
+            is_selecting = True
+            selected_cells[0] = current_cell
+            selected_cells[1] = current_cell
+        elif is_selecting and return_type != "<SHIFT>" and command != "c" and command != "x":
+            is_selecting = False
+            selected_cells.clear()
+
         
         reprint = False
         if command == 'd':
@@ -1409,9 +1498,27 @@ while True:
             cell_names = command[2:].split(' ')
             COPY(cell_names, False)
             reprint = True
+        elif command == "c":
+            is_selecting = False
+            clip_board = [selected_cells[0], selected_cells[1]]
+            clip_board_operation = "c"
+            reprint = True
         elif command.startswith("x "):
             cell_names = command[2:].split(' ')
             CUT(cell_names)
+            reprint = True
+        elif command == "x":
+            is_selecting = False
+            clip_board = [selected_cells[0], selected_cells[1]]
+            clip_board_operation = "x"
+            reprint = True
+        elif command == 'v':
+            cell_names = ["{0}:{1}".format(clip_board[0], clip_board[1]), current_cell]
+            if clip_board_operation == "c":
+                COPY(cell_names, False)
+            elif clip_board_operation == "x":
+                CUT(cell_names)
+            clip_board_operation = ""
             reprint = True
         elif command == 'z':
             reprint = True
@@ -1476,22 +1583,30 @@ while True:
             x, y = convert_cell_name_to_x_y(current_cell)
             if x > 0:
                 set_current_cell(x-1, y, '')
+            if is_selecting:
+                selected_cells[1] = current_cell
             reprint = True
         elif command == "<RIGHT>":
             command_stack.pop()
             x, y = convert_cell_name_to_x_y(current_cell)
             set_current_cell(x+1, y, '')
+            if is_selecting:
+                selected_cells[1] = current_cell
             reprint = True
         elif command == "<UP>":
             command_stack.pop()
             x, y = convert_cell_name_to_x_y(current_cell)
             if y > 0:
                 set_current_cell(x, y-1, '')
+            if is_selecting:
+                selected_cells[1] = current_cell
             reprint = True
         elif command == "<DOWN>":
             command_stack.pop()
             x, y = convert_cell_name_to_x_y(current_cell)
             set_current_cell(x, y+1, '')
+            if is_selecting:
+                selected_cells[1] = current_cell
             reprint = True
         else:
             show_instructions = not NO_COMMANDS
