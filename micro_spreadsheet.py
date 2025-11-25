@@ -904,7 +904,30 @@ def LOAD():
         lines = csv_str.split('\n')
         for i, line in enumerate(lines):
             if not line.startswith('<meta>') and line != '':
-                line_cells = line.split(',')
+                line_cells = []
+                in_quotes = False
+                last = 0
+                for c in range(0, len(line)):
+                    if line[c] == '"' and not in_quotes:
+                        in_quotes = True
+                    elif in_quotes and line[c] == '"' and c+1 < len(line) and line[c+1] != '"' and c-1 > 0 and line[c-1] != '"':
+                        in_quotes = False
+                    elif (line[c] == ',') and not in_quotes:
+                        cell = line[last:c]
+                        if cell.startswith("\"") and cell.endswith("\""):
+                            cell = cell.replace("\"\"", "\"")
+                            cell = cell[1:-1]
+                            
+                        line_cells.append(cell)
+                        last = c+1
+
+                    
+                cell = line[last:]
+                if cell.startswith("\"") and cell.endswith("\""):
+                    cell = cell.replace("\"\"", "\"")
+                    cell = cell[1:-1]
+                line_cells.append(cell)
+
                 cells.append(line_cells)
 
         # PARSE META DATA
@@ -947,7 +970,14 @@ def SAVE():
     with open(FILE, 'w') as file:
         for y, row in enumerate(cells):
             for x, value in enumerate(row):
-                file.write(str(value))
+
+                formated_val = value
+                if ',' in formated_val:
+                    if "\"" in formated_val:
+                        formated_val = formated_val.replace("\"", "\"\"")
+                    formated_val = f'"{formated_val}"'
+
+                file.write(str(formated_val))
                 if x != len(row)-1:
                     file.write(',')
             file.write('\n')
