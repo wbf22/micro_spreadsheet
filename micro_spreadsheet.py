@@ -825,7 +825,7 @@ def DISPLAY(show_equations=False):
     x_adjustment = 0
     cols_skipped = 0
     while current_cell_terminal_x - x_adjustment > terminal_width:
-        x_adjustment += column_widths[cols_skipped]
+        x_adjustment += column_widths[cols_skipped]+3
         cols_skipped+=1
     y_adjustment = 0
     rows_skipped = 0
@@ -862,7 +862,7 @@ def DISPLAY(show_equations=False):
             print("".join(row_label), end="")
 
         else: 
-            x_range = len(display[y]) - i
+            x_range = len(display[y])
 
         print(display[y][i:i+x_range])
         
