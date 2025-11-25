@@ -837,9 +837,19 @@ def DISPLAY(show_equations=False):
         rows_skipped+=1
     if cols_skipped > 0:
         cols_skipped+=1
+    if rows_skipped > 0:
+        rows_skipped+=1
+
+        
 
     y_range = min(terminal_height + rows_skipped, len(display))
-    for y in range(rows_skipped, y_range):
+    row_ys = []
+    if rows_skipped == 0:
+        row_ys = [*range(rows_skipped, y_range)]
+    else:
+        row_ys = [0, *range(rows_skipped, y_range)]
+
+    for y in row_ys:
         skipped = 0
         i = 0
         while skipped < cols_skipped:
@@ -857,8 +867,8 @@ def DISPLAY(show_equations=False):
             # row label
             row_label = []
             row_label.append(' ')
-            row_num_str = str(y+rows_skipped)
-            if y != rows_skipped: row_label.append(indigo(row_num_str))
+            row_num_str = str(y-1) if y > 0 else str(y)
+            if y != 0: row_label.append(indigo(row_num_str))
             else: row_label.append(' ' * (len(row_num_str)))
             row_label.append(' ' * (row_label_space - len(row_num_str)))
             row_label.append(print_cadet_grey(' |'))
