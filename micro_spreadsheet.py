@@ -106,7 +106,8 @@ def wrap(width: int, str: str) -> str:
                 wrapped_str.append(word)
                 line_length = len(word)
         else:
-            wrapped_str.append(' ')
+            if word != words[0]:
+                wrapped_str.append(' ')
             wrapped_str.append(word)
             line_length += len(word) + 1
     
@@ -328,6 +329,7 @@ args = parser.parse_args()
 FILE = args.file
 NO_COMMANDS = not args.commands
 PRECISION = 4
+WRAP_WIDTH = 20
 
 cells=[['']]
 width=1
@@ -704,10 +706,11 @@ def DISPLAY(show_equations=False):
             equation = get_equation(x, y)
             if equation != None: value = equation
 
-        column_widths[x] = 10
-        val_lines = len(wrap(10, value).split('\n'))
-        if val_lines > row_heights[y]:
-            row_heights[y] = val_lines
+        if value != None:
+            column_widths[x] = WRAP_WIDTH
+            val_lines = len(wrap(WRAP_WIDTH, value).split('\n'))
+            if val_lines > row_heights[y]:
+                row_heights[y] = val_lines
 
     for y, row in enumerate(cells):
         for x, value in enumerate(row):
