@@ -81,6 +81,10 @@ def substitute_if_ref(value: str, equation_targets: {str, float}) -> tuple[bool,
                 try:
                     float_value = float(cells[y][x])
                 except ValueError:
+
+                    if cells[y][x] == "":
+                        return False, float_value
+
                     return False, cells[y][x]
 
     return False, float_value
