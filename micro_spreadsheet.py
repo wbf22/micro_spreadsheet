@@ -570,8 +570,12 @@ def TRIM_CELLS():
     for y in range(height-1, -1, -1):
         row_has_data = False
         for x in range(0, width):
+            cell_name = convert_x_to_alpha_value(x) + str(y)
             value = get_cell(cells, x, y)
             if value != '' and value != None:
+                row_has_data = True
+                break
+            elif cell_name in equations:
                 row_has_data = True
                 break
         if not row_has_data and y < last_y_with_data:
@@ -583,8 +587,12 @@ def TRIM_CELLS():
     for x in range(width-1, -1, -1):
         column_has_data = False
         for y in range(0, height):
+            cell_name = convert_x_to_alpha_value(x) + str(y)
             value = get_cell(cells, x, y)
             if value != '' and value != None:
+                column_has_data = True
+                break
+            elif cell_name in equations:
                 column_has_data = True
                 break
         if not column_has_data and x < last_x_with_data:
