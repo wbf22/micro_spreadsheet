@@ -444,23 +444,38 @@ signal.signal(signal.SIGINT, handle_exit)
 signal.signal(signal.SIGTERM, handle_exit)
 
 def input_f():
-    global command_stack, old_settings, fd
+    global command_stack, old_settings, fd, current_cell
 
     return_type = '\n'
 
     sys.stdout.flush()
+
+    # set chars to current vlaue
+    x, y = convert_cell_name_to_x_y(current_cell)
+    current_value = get_cell(cells, x, y)
+    if current_cell in equations:
+        current_value = equations[current_cell]
+    if current_value == None: current_value = ''
+    chars = list(current_value)
+
+    total_in = ''.join(chars)
+    ch = ''
+    cursor_pos = len(total_in)
+    command_stack_position = len(command_stack)
+    escaped = False
+    has_edited = False
+    
+    print(f"\033[{4}G", end='') # go to start of line
+    print("\033[K", end='') # clear to end of line
+    print(total_in, end='') # print chars
+    print(f"\r\033[{cursor_pos+3}C", end='')
+
 
     fd = sys.stdin.fileno()
     old_settings = termios.tcgetattr(fd)
     try:
         tty.setraw(sys.stdin.fileno())
 
-        chars = []
-        total_in = ''
-        ch = ''
-        cursor_pos = 0
-        command_stack_position = len(command_stack)
-        escaped = False
         while ch != '\n' and ch != '\r':
             ch = sys.stdin.read(1)
             if ch == '\n' or ch == '\r':
@@ -485,6 +500,7 @@ def input_f():
                 elif ch == '\x03':
                     os.kill(os.getpid(), signal.SIGINT)
                 else:
+                    has_edited = True
                     if cursor_pos >= len(chars):
                         chars.append(ch)
                     else:
@@ -505,19 +521,19 @@ def input_f():
 
                 # arrow direction
                 if ch == 'D':
-                    if len(chars) == 0:
+                    if not has_edited:
                         return "<LEFT>", return_type
 
                     if cursor_pos > 0:
                         cursor_pos -= 1
                 elif ch == 'C':
-                    if len(chars) == 0:
+                    if not has_edited:
                         return "<RIGHT>", return_type
                 
                     if cursor_pos < len(total_in):
                         cursor_pos += 1
                 elif ch == 'A':
-                    if len(chars) == 0:
+                    if not has_edited:
                         return "<UP>", return_type
                 
                     if command_stack_position > 0:
@@ -526,7 +542,7 @@ def input_f():
                         chars = [c for c in command_stack[command_stack_position]]
                         cursor_pos = len(chars)
                 elif ch == 'B':
-                    if len(chars) == 0:
+                    if not has_edited:
                         return "<DOWN>", return_type
                 
                     if command_stack_position < len(command_stack)-1:
