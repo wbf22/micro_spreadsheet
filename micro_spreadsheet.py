@@ -520,6 +520,8 @@ def input_f():
                 break
             if not escaped:
                 if ch == '\x7f':
+                    if is_selecting and len(selected_cells) == 2 and len(chars) == 0 and cursor_pos == 0:
+                        return "<BACKSPACE>", return_type
                     if len(chars) > 0:
                         if cursor_pos >= len(chars):
                             chars.pop()
@@ -1256,6 +1258,27 @@ def WRAP(command):
         else: 
             wrapped_cell_names.add(cell_name)
 
+def CLEAR(cell_names: list[str]):
+    global cells, equations, wrapped_cell_names, colors
+
+    WRITE_ACTION_FOR_UNDO()
+
+    if len(cell_names) != 2:
+        return
+
+    startx, starty, endx, endy = normalize_cell_range(cell_names[0] + ':' + cell_names[1])
+
+    for x in range(startx, endx + 1):
+        for y in range(starty, endy + 1):
+            cell_name = convert_x_to_alpha_value(x) + str(y)
+            set_cell(cells, x, y, '')
+            if cell_name in equations:
+                del equations[cell_name]
+            if cell_name in wrapped_cell_names:
+                wrapped_cell_names.remove(cell_name)
+            if cell_name in colors:
+                del colors[cell_name]
+
 def MOVE():
     global current_cell
 
@@ -1515,10 +1538,16 @@ while True:
                 ice_blue('i <cell>') + tekhelet(' - inspect the equation or value of a cell (or display with equations if no cell is provided)')
             )
             print(
-                ice_blue('c <cell or range> <cell> ') + tekhelet(' - copy a cell(s)')
+                ice_blue('c') + tekhelet(' - copy a cell(s) selected with shift+arrow keys or with <cell or range> <cell>')
             )
             print(
-                ice_blue('x <cell or range> <cell> ') + tekhelet(' - cut a cell(s)')
+                ice_blue('x') + tekhelet(' - cut a cell(s) selected with shift+arrow keys or with <cell or range> <cell>')
+            )
+            print(
+                ice_blue('v') + tekhelet(' - paste copied or cut content into cell')
+            )
+            print(
+                ice_blue('<backspace> / del') + tekhelet(' - clear a selected range')
             )
             print(
                 ice_blue('z') + tekhelet(' - undo')
@@ -1579,7 +1608,7 @@ while True:
             is_selecting = True
             selected_cells.append(current_cell)
             selected_cells.append(current_cell)
-        elif is_selecting and return_type != "<SHIFT>" and command != "c" and command != "x":
+        elif is_selecting and return_type != "<SHIFT>" and command != "c" and command != "x" and command != "<BACKSPACE>" and command != "del":
             is_selecting = False
             selected_cells.clear()
 
@@ -1633,6 +1662,12 @@ while True:
                 clip_board = [current_cell, current_cell]
             clip_board_operation = "x"
             reprint = True
+        elif command == "del" or command == "<BACKSPACE>":
+            if len(selected_cells) == 2:
+                CLEAR(selected_cells)
+                selected_cells.clear()
+                is_selecting = False
+                reprint = True
         elif command == 'v':
             cell_names = ["{0}:{1}".format(clip_board[0], clip_board[1]), current_cell]
             if clip_board_operation == "c":
@@ -1780,4 +1815,3 @@ while True:
         print(print_red("\n--- ERROR ---"))
         print(e)
         print()
-
