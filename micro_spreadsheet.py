@@ -468,13 +468,18 @@ def input_f():
 
     sys.stdout.flush()
 
-    # set chars to current vlaue
-    x, y = convert_cell_name_to_x_y(current_cell)
-    current_value = get_cell(cells, x, y)
-    if current_cell in equations:
-        current_value = equations[current_cell]
-    if current_value == None: current_value = ''
-    chars = list(current_value)
+    # When a range is selected, treat the prompt like a command line so
+    # copy/cut can be entered without editing the current cell contents.
+    if is_selecting and len(selected_cells) == 2:
+        chars = []
+    else:
+        # set chars to current value
+        x, y = convert_cell_name_to_x_y(current_cell)
+        current_value = get_cell(cells, x, y)
+        if current_cell in equations:
+            current_value = equations[current_cell]
+        if current_value == None: current_value = ''
+        chars = list(current_value)
 
     total_in = ''.join(chars)
     ch = ''
@@ -1764,6 +1769,5 @@ while True:
         print(print_red("\n--- ERROR ---"))
         print(e)
         print()
-
 
 
