@@ -757,7 +757,7 @@ def DISPLAY(show_equations=False):
     global cells, width, height, current_cell, colors
 
     # clear screen
-    print("\033[2J\033[H", "")
+    print("\033[3J\033[2J\033[H", "")
     sys.stdout.flush()
 
     # determine wrap properties
