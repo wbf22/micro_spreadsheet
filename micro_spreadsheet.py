@@ -1,6 +1,7 @@
 
 import argparse
 import copy
+import math
 import os
 import re
 import shutil
@@ -21,7 +22,23 @@ Features
 '''
 ANSII_RESET = "\033[0m"
 operators = {'+', '-', '/', '*', '//', '**', '(', ')', ':'}
-functions = {'sum', 'avg'}
+functions = {'sum', 'avg', 'sin', 'cos', 'tan', 'asin', 'acos', 'atan', 'sinh', 'cosh', 'tanh', 'log', 'ln'}
+constants = {'pi', 'e'}
+math_functions = {
+    'sin': math.sin,
+    'cos': math.cos,
+    'tan': math.tan,
+    'asin': math.asin,
+    'acos': math.acos,
+    'atan': math.atan,
+    'sinh': math.sinh,
+    'cosh': math.cosh,
+    'tanh': math.tanh,
+    'log': math.log10,
+    'ln': math.log,
+    'pi': math.pi,
+    'e': math.e,
+}
 
 
 def convert_cell_name_to_x_y(name: str) -> tuple[int, int]:
@@ -245,7 +262,8 @@ def is_equation(str: str) -> bool:
                     if not is_number:
                         next = None if len(tokens) <= i+1 else tokens[i+1]
                         is_function = token in functions and next == '('
-                        if not is_function:
+                        is_constant = token in constants
+                        if not is_function and not is_constant:
                             return False
                         
         return True
@@ -669,7 +687,7 @@ def APPLY_EQUATIONS():
             while i < len(tokens):
                 token = tokens[i]
                 if token not in operators:
-                    if token in functions:
+                    if token in {'sum', 'avg'}:
                         cell_range = tokens[i+2] + tokens[i+3] + tokens[i+4]
                         target_cells = convert_cell_range_to_targets(cell_range)
                         target_cell_names = [convert_x_to_alpha_value(x) + str(y) for x, y in target_cells]
@@ -687,9 +705,12 @@ def APPLY_EQUATIONS():
                         tokens = new_tokens
                         i-=1
                     else:
-                        failed_to_subsitute, float_value = substitute_if_ref(token, equation_targets)
-                        if failed_to_subsitute: break
-                        substituted_equation.append(str(float_value))
+                        if token in math_functions:
+                            substituted_equation.append(token)
+                        else:
+                            failed_to_subsitute, float_value = substitute_if_ref(token, equation_targets)
+                            if failed_to_subsitute: break
+                            substituted_equation.append(str(float_value))
                 else:
                     substituted_equation.append(token)
                 i+=1
@@ -698,7 +719,7 @@ def APPLY_EQUATIONS():
             if not failed_to_subsitute:
                 substituted_equation = ''.join(substituted_equation)
                 try:
-                    resolution = eval(substituted_equation)
+                    resolution = eval(substituted_equation, {"__builtins__": {}}, math_functions)
                 except Exception as e:
                     # nothing
                     resolution = None
@@ -1531,10 +1552,8 @@ while True:
             print(
                 ice_blue('q') + tekhelet(' - quit')
             )
-            print(
-                mint_green('enter command above or cell(s) to modify')
-            )
             show_instructions = False
+        if not NO_COMMANDS: print(mint_green('arrow keys to move, \'h\' to see commands'))
         print(mint_green('$: '), end='')
         command, return_type = input_f()
         command_stack.append(command)
@@ -1694,7 +1713,6 @@ while True:
                 selected_cells[1] = current_cell
             reprint = True
         else:
-            show_instructions = not NO_COMMANDS
             reprint = True
 
             # add to stack
@@ -1746,7 +1764,6 @@ while True:
         print(print_red("\n--- ERROR ---"))
         print(e)
         print()
-
 
 
 

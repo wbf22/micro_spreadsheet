@@ -10,7 +10,7 @@
             "request": "launch",
             "program": "micro_spreadsheet.py",
             "console": "integratedTerminal",
-            // "args": "-c"
+            "args": "-c"
             // "args": "brandon_and_some_ashlyn.csv"
             // "args": "mortgage_payoff.csv"
             // "args": "test.csv"
