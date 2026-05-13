@@ -273,10 +273,20 @@ def is_cell_range(str: str) -> bool:
      regex = r'^[a-zA-Z]+\d+:[a-zA-Z]+\d+$'
      return re.search(regex, str)
 
+def normalize_cell_range(cell_range: str) -> tuple[int, int, int, int]:
+    start_cell_name, end_cell_name = cell_range.split(':')
+    startx, starty = convert_cell_name_to_x_y(start_cell_name)
+    endx, endy = convert_cell_name_to_x_y(end_cell_name)
+
+    if startx > endx:
+        startx, endx = endx, startx
+    if starty > endy:
+        starty, endy = endy, starty
+
+    return startx, starty, endx, endy
+
 def convert_cell_range_to_targets(cell_range: str) -> list[tuple[int, int]]:
-    cell_names = cell_range.split(':')
-    startx, starty = convert_cell_name_to_x_y(cell_names[0])
-    endx, endy = convert_cell_name_to_x_y(cell_names[1])
+    startx, starty, endx, endy = normalize_cell_range(cell_range)
 
     target_cells = []
     for x in range(startx, endx+1):
@@ -798,8 +808,9 @@ def DISPLAY(show_equations=False):
     current_x, current_y = convert_cell_name_to_x_y(current_cell)
     selected_start_x, selected_start_y, selected_end_x, selected_end_y = -1, -1, -1, -1
     if len(selected_cells) == 2 and is_selecting:
-        selected_start_x, selected_start_y = convert_cell_name_to_x_y(selected_cells[0])
-        selected_end_x, selected_end_y = convert_cell_name_to_x_y(selected_cells[1])
+        selected_start_x, selected_start_y, selected_end_x, selected_end_y = normalize_cell_range(
+            selected_cells[0] + ':' + selected_cells[1]
+        )
 
     # rows
     for y, row in enumerate(cells):
@@ -1769,5 +1780,4 @@ while True:
         print(print_red("\n--- ERROR ---"))
         print(e)
         print()
-
 
