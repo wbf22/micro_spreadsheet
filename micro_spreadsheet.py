@@ -22,7 +22,7 @@ Features
 '''
 ANSII_RESET = "\033[0m"
 operators = {'+', '-', '/', '*', '//', '**', '(', ')', ':'}
-functions = {'sum', 'avg', 'sin', 'cos', 'tan', 'asin', 'acos', 'atan', 'sinh', 'cosh', 'tanh', 'log', 'ln'}
+functions = {'sum', 'avg', 'sin', 'cos', 'tan', 'asin', 'acos', 'atan', 'sinh', 'cosh', 'tanh', 'log', 'ln', 'sqrt'}
 constants = {'pi', 'e'}
 math_functions = {
     'sin': math.sin,
@@ -36,6 +36,7 @@ math_functions = {
     'tanh': math.tanh,
     'log': math.log10,
     'ln': math.log,
+    'sqrt': math.sqrt,
     'pi': math.pi,
     'e': math.e,
 }
