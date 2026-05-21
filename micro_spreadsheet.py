@@ -523,7 +523,10 @@ def input_f():
                 if ch == '\x7f':
                     if is_selecting and len(selected_cells) == 2 and len(chars) == 0 and cursor_pos == 0:
                         return "<BACKSPACE>", return_type
-                    if len(chars) > 0:
+                    if not has_edited and len(chars) > 0:
+                        chars = []
+                        cursor_pos = 0
+                    elif len(chars) > 0:
                         if cursor_pos >= len(chars):
                             chars.pop()
                         elif cursor_pos > 0:

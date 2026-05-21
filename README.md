@@ -4,6 +4,8 @@ A tiny terminal spreadsheet editor for CSV files.
 
 If you'd like to support me, you can do that here https://github.com/sponsors/wbf22
 
+![Screenshot](screenshot.png)
+
 ## Run
 
 ```bash
