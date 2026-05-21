@@ -113,7 +113,9 @@ def wrap(width: int, str: str) -> str:
     wrapped_str = []
     line_length = 0
     for word in words:
-        if line_length + len(word) + 1 > width:
+        needs_space = line_length > 0
+        space_needed = 1 if needs_space else 0
+        if line_length + len(word) + space_needed > width:
             if len(word) > width:
 
                 remainder = word
@@ -128,10 +130,12 @@ def wrap(width: int, str: str) -> str:
                 wrapped_str.append(word)
                 line_length = len(word)
         else:
-            if word != words[0]:
+            if needs_space:
                 wrapped_str.append(' ')
             wrapped_str.append(word)
-            line_length += len(word) + 1
+            line_length += len(word)
+            if needs_space:
+                line_length += 1
     
     return ''.join(wrapped_str)
 
@@ -767,7 +771,7 @@ def DISPLAY(show_equations=False):
     # determine wrap properties
 
     column_widths = {i: 4 for i in range(width)}
-    row_heights = {i: 1 for i in range(height)}
+    extra_lines = {i: 0 for i in range(height)}
 
     for cell_name in wrapped_cell_names:
         x, y = convert_cell_name_to_x_y(cell_name)
@@ -779,8 +783,8 @@ def DISPLAY(show_equations=False):
         if value != None:
             column_widths[x] = WRAP_WIDTH
             val_lines = len(wrap(WRAP_WIDTH, value).split('\n'))
-            if val_lines > row_heights[y]:
-                row_heights[y] = val_lines
+            if val_lines - 1 > extra_lines[y]:
+                extra_lines[y] = val_lines - 1
 
     for y, row in enumerate(cells):
         for x, value in enumerate(row):
@@ -821,16 +825,19 @@ def DISPLAY(show_equations=False):
     # rows
     for y, row in enumerate(cells):
 
-        
-        row_display = []
-        for cell_h in range(row_heights[y]):
-            # row label
-            row_display.append(' ')
-            row_num_str = str(y)
-            if cell_h == 0: row_display.append(indigo(row_num_str))
-            else: row_display.append(' ' * len(row_num_str))
-            row_display.append(' ' * (row_label_space - len(row_num_str)))
-            row_display.append(print_cadet_grey(' |'))
+        total_lines = 1 + extra_lines[y]
+        for cell_h in range(total_lines):
+            row_display = []
+
+            if cell_h == 0:
+                row_display.append(' ')
+                row_num_str = str(y)
+                row_display.append(indigo(row_num_str))
+                row_display.append(' ' * (row_label_space - len(row_num_str)))
+                row_display.append(print_cadet_grey(' |'))
+            else:
+                row_display.append(' ' * (1 + row_label_space))
+                row_display.append(print_cadet_grey(' |'))
 
             # cells
             for x, value in enumerate(row):
@@ -843,13 +850,14 @@ def DISPLAY(show_equations=False):
                 cell_name = convert_x_to_alpha_value(x) + str(y)
                 cur_line = ''
                 if value != None:
-                    lines = []
                     if cell_name in wrapped_cell_names:
                         lines = wrap(cell_width, value).split('\n')
-                    else:
-                        lines = value.split('\n')
-                    cur_line = '' if cell_h >= len(lines) else lines[cell_h]
-                else: cur_line = 'Error'
+                        cur_line = '' if cell_h >= len(lines) else lines[cell_h]
+                    elif cell_h == 0:
+                        cur_line = str(value)
+                else:
+                    if cell_h == 0:
+                        cur_line = 'Error'
 
                 cell_contents = []
                 cell_contents.append(' ')
@@ -895,7 +903,7 @@ def DISPLAY(show_equations=False):
     terminal_width = size.columns
     terminal_height = size.lines
     current_cell_terminal_x = sum([column_widths[i]+3 for i in range(0, current_x+1)]) + row_label_space+2
-    current_cell_terminal_y = sum([row_heights[i] for i in range(0, current_y+1)]) + 3
+    current_cell_terminal_y = sum([1 + extra_lines[i] for i in range(0, current_y+1)]) + 3
     x_adjustment = 0
     cols_skipped = 0
     while current_cell_terminal_x - x_adjustment > terminal_width:
@@ -904,7 +912,7 @@ def DISPLAY(show_equations=False):
     y_adjustment = 0
     rows_skipped = 0
     while current_cell_terminal_y - y_adjustment > terminal_height:
-        y_adjustment += row_heights[rows_skipped]
+        y_adjustment += 1 + extra_lines[rows_skipped]
         rows_skipped+=1
     if cols_skipped > 0:
         cols_skipped+=1
@@ -1245,15 +1253,23 @@ def CUT(cell_names: list[str]):
     COPY(cell_names, True)
 
 def WRAP(command):
-    cell_name = command[2:]
+    global is_selecting, selected_cells
     target_cells = []
 
     WRITE_ACTION_FOR_UNDO()
-    if is_cell_range(cell_name):
-        target_cells = convert_cell_range_to_targets(cell_name)
+    if command == 'w':
+        if len(selected_cells) == 2 and is_selecting:
+            target_cells = convert_cell_range_to_targets(selected_cells[0] + ':' + selected_cells[1])
+        else:
+            x, y = convert_cell_name_to_x_y(current_cell)
+            target_cells.append([x, y])
     else:
-        x, y = convert_cell_name_to_x_y(cell_name)
-        target_cells.append([x, y])
+        cell_name = command[2:]
+        if is_cell_range(cell_name):
+            target_cells = convert_cell_range_to_targets(cell_name)
+        else:
+            x, y = convert_cell_name_to_x_y(cell_name)
+            target_cells.append([x, y])
 
     for x, y in target_cells:
         cell_name = convert_x_to_alpha_value(x) + str(y)
@@ -1689,7 +1705,7 @@ while True:
             reprint = True
             r,g,b = PICK_COLOR()
             colors[current_cell] = [r,g,b]
-        elif command.startswith("w "):
+        elif command == 'w' or command.startswith("w "):
             WRAP(command)
             reprint = True
         elif command == 'row':
