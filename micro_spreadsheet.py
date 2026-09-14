@@ -39,8 +39,8 @@ math_functions = {
     'pi': math.pi,
     'e': math.e,
 }
-# lines printed below the grid (status line + hint/message line + edit prompt)
-STATUS_LINES = 3
+# lines printed below the grid (hint/message line + edit prompt)
+STATUS_LINES = 2
 # ---------------------------------------------------------------------------
 # cell name helpers
 # ---------------------------------------------------------------------------
@@ -1114,14 +1114,7 @@ def redraw():
     TRIM_CELLS()
     APPLY_EQUATIONS()
     DISPLAY()
-    x, y = convert_cell_name_to_x_y(current_cell)
-    raw = get_equation(x, y)
-    if raw is None:
-        raw = get_cell(cells, x, y)
-    if raw is None:
-        raw = 'Error' if convert_x_to_alpha_value(x) + str(y) in equations else ''
-    sel = f"  [{selected_cells[0]}:{selected_cells[1]}]" if is_selecting and len(selected_cells) == 2 else ''
-    print(mint_green(f"{current_cell}{sel}: ") + str(raw))
+    # one line below the grid: a message if there is one, otherwise the hints
     if message:
         print(message)
         message = ''
