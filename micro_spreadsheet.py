@@ -1083,15 +1083,15 @@ def PICK_COLOR():
 # navigation / modes
 # ---------------------------------------------------------------------------
 HELP = [
+    (':', 'open the command line (up/down for history, esc to cancel)'),
+    ('type anything', 'replace the cell (arrows commit and move)'),
+    ('enter / F2', 'edit the cell (arrows move the text cursor)'),
     ('arrows', 'move'),
     ('shift+arrows', 'select a range'),
     ('esc', 'clear selection'),
-    ('type anything', 'replace the cell (arrows commit and move)'),
-    ('enter / F2', 'edit the cell (arrows move the text cursor)'),
     ('=...', 'start an equation, e.g. =a1*2 or =sum(a0:a4)'),
     ('tab', 'commit and move right (while editing) / move right'),
     ('backspace / del', 'clear cell or selection'),
-    (':', 'open the command line (up/down for history, esc to cancel)'),
     (':c / :x / :v', 'copy / cut / paste the selection or current cell'),
     (':z / :r', 'undo / redo'),
     (':row / :col', 'insert row above / col before'),
@@ -1107,7 +1107,7 @@ HELP = [
     (':q', 'quit'),
     (':h', 'this help'),
 ]
-HINT = "type to edit · enter edit · :c :x :v copy/cut/paste · :z :r undo/redo · :s save · :h help · :q quit"
+HINT = ":h help"
 MOVES = {'UP': (0, -1), 'DOWN': (0, 1), 'LEFT': (-1, 0), 'RIGHT': (1, 0)}
 def redraw():
     global message
@@ -1119,7 +1119,8 @@ def redraw():
         print(message)
         message = ''
     elif not NO_COMMANDS:
-        print(tekhelet(HINT))
+        # print(tekhelet(HINT))
+        pass
 def wait_for_key():
     print(tekhelet('press any key to continue'))
     read_key()
@@ -1322,6 +1323,7 @@ while True:
         elif key in ('BACKSPACE', 'DELETE'):
             CLEAR(list(selection_range()))
             clear_selection()
+            move(0, 1, extend=False)
         redraw()
     except Exception as e:
         print(print_red("\n--- ERROR ---"))
