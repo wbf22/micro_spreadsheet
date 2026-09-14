@@ -383,8 +383,8 @@ def set_current_cell(last_x: int, last_y: int, return_type: str = '\n'):
 # terminal input
 # ---------------------------------------------------------------------------
 def handle_exit(signum=None, frame=None):
-    # show cursor, reset colors, re-enable line wrapping
-    print(ANSII_RESET + "\033[?25h\033[?7h")
+    # show cursor, reset colors, re-enable line wrapping, disable bracketed paste
+    print(ANSII_RESET + "\033[?25h\033[?7h\033[?2004l")
     sys.exit(0)
 signal.signal(signal.SIGINT, handle_exit)
 signal.signal(signal.SIGTERM, handle_exit)
@@ -403,8 +403,30 @@ CONTROL_KEYS = {
     '\x7f': 'BACKSPACE', '\x08': 'BACKSPACE',
     '\x03': 'CTRL_C',
 }
+PASTE_MARK = '\x00P\x00'   # sentinel prefix returned for pasted text
+PASTE_START = '\x1b[200~'  # bracketed paste start marker
+PASTE_END = '\x1b[201~'    # bracketed paste end marker
+def read_paste(fd: int) -> str:
+    """Read a bracketed-paste payload (between start/end markers) from fd."""
+    buf = ''
+    while PASTE_END not in buf:
+        if not select.select([fd], [], [], 0.5)[0]:
+            break  # no more data, don't hang forever
+        data = os.read(fd, 4096).decode(errors='ignore')
+        if not data:
+            break
+        buf += data
+    end = buf.find(PASTE_END)
+    if end != -1:
+        return buf[:end]
+    # no end marker seen: strip a possibly partial trailing marker
+    for i in range(1, len(PASTE_END)):
+        if buf.endswith(PASTE_END[:i]):
+            return buf[:-i]
+    return buf
 def read_key() -> str:
-    """Return a key name ('UP', 'ENTER', 'ESC', ...) or a single printable char."""
+    """Return a key name ('UP', 'ENTER', 'ESC', ...), a single printable char,
+    or PASTE_MARK + pasted text when the user pastes from outside the app."""
     sys.stdout.flush()
     fd = sys.stdin.fileno()
     old = termios.tcgetattr(fd)
@@ -412,13 +434,16 @@ def read_key() -> str:
         tty.setraw(fd)
         ch = os.read(fd, 1).decode(errors='ignore')
         if ch == '\x1b':
-            # an escape sequence arrives all at once; a lone ESC has nothing after it
+            # gather the escape sequence byte by byte so we can spot bracketed paste
             seq = ''
-            while select.select([fd], [], [], 0.03)[0]:
+            while True:
+                if not select.select([fd], [], [], 0.03)[0]:
+                    return 'ESC'  # lone ESC
                 seq += os.read(fd, 1).decode(errors='ignore')
-            if seq == '':
-                return 'ESC'
-            return KEY_SEQUENCES.get(seq, 'UNKNOWN')
+                if seq.startswith('[200~'):
+                    return PASTE_MARK + read_paste(fd)
+                if seq in KEY_SEQUENCES:
+                    return KEY_SEQUENCES[seq]
         return CONTROL_KEYS.get(ch, ch)
     finally:
         termios.tcsetattr(fd, termios.TCSADRAIN, old)
@@ -437,6 +462,13 @@ def edit_line(prompt: str, prompt_len: int, initial: str,
         sys.stdout.write(f'\033[{prompt_len + pos + 1}G')
         sys.stdout.flush()
         key = read_key()
+        if key.startswith(PASTE_MARK):
+            text = key[len(PASTE_MARK):]
+            if text:
+                for ch_ in text:
+                    chars.insert(pos, ch_)
+                    pos += 1
+            continue
         if key in ('ENTER', 'TAB'):
             return ''.join(chars), key
         if key in ('ESC', 'CTRL_C'):
@@ -1320,8 +1352,9 @@ def run_command(command: str):
 # ---------------------------------------------------------------------------
 # main
 # ---------------------------------------------------------------------------
-# Disable line wrapping
+# Disable line wrapping, enable bracketed paste (so outside pastes arrive intact)
 print("\033[?7l", end='')
+print("\033[?2004h", end='')
 LOAD()
 redraw()
 while True:
@@ -1349,6 +1382,11 @@ while True:
                 command_stack.append(cmd)
                 if run_command(cmd) == 'quit':
                     break
+        elif key.startswith(PASTE_MARK):
+            # pasted text from outside the app replaces the current cell
+            text = key[len(PASTE_MARK):]
+            x, y = convert_cell_name_to_x_y(current_cell)
+            commit_cell(x, y, text)
         elif len(key) == 1 and key.isprintable():
             edit_current(key, arrows_commit=True)
         # clear
