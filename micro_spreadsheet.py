@@ -226,7 +226,7 @@ def grey_gradient(i: int, str: str) -> str:
 def black(str: str) -> str:
     return print_in_color(str, '\033[2m')
 def lighter_background(str: str) -> str:
-    return print_in_color(str, '\033[48;2;40;40;40m')
+    return print_in_color(str, '\033[48;2;75;85;110m')
 def get_float_precision(f):
     s = str(f)
     if '.' in s:
