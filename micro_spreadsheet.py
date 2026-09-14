@@ -114,6 +114,9 @@ def substitute_if_ref(value: str, equation_targets: dict) -> tuple[bool, str]:
                 float_value = equation_targets[value]
             else:
                 return True, float_value
+        elif value in equations:
+            # an equation that hasn't been evaluated in this pass yet, try again later
+            return True, float_value
         else:
             x, y = convert_cell_name_to_x_y(value)
             if y < len(cells) and x < len(cells[y]):
@@ -151,6 +154,29 @@ def tokenize_equation(equation: str) -> list[str]:
     if last != len(equation):
         tokens.append(equation[last:].replace(" ", ""))
     return tokens
+def is_equation(str: str) -> bool:
+    global operators, functions
+    if str == '': return False
+    # check for single numbers
+    try:
+        float(str)
+        return False
+    except ValueError:
+        # return str.startswith("=")
+        # split by operators
+        tokens = tokenize_equation(str)
+        number_regex = r'^\d*\.?\d+$'  # start, 0 or more digit, ., 1 or more digit, finish
+        for i, token in enumerate(tokens):
+            if token not in operators:
+                if not is_cell_name(token):
+                    is_number = re.search(number_regex, token)
+                    if not is_number:
+                        next = None if len(tokens) <= i+1 else tokens[i+1]
+                        is_function = token in functions and next == '('
+                        is_constant = token in constants
+                        if not is_function and not is_constant:
+                            return False           
+        return True
 # ---------------------------------------------------------------------------
 # text helpers and colors
 # ---------------------------------------------------------------------------
@@ -328,9 +354,7 @@ def get_cell(cells: list[list[str]], x: int, y: int) -> str:
     return None
 def get_equation(x: int, y: int) -> str:
     cell_name = convert_x_to_alpha_value(x) + str(y)
-    if cell_name in equations:
-        return '=' + equations[cell_name]
-    return None
+    return equations.get(cell_name)
 def modify_equation(source_cell_name: str, source_x: int, source_y: int, target_x: int, target_y: int) -> str:
     equation = equations[source_cell_name]
     tokens = tokenize_equation(equation)
@@ -522,9 +546,8 @@ def APPLY_EQUATIONS():
         for target, equation in unresolved_equations.items():
             failed_to_subsitute = False
             invalid = False
-            tokens = tokenize_equation(equation)
+            tokens = tokenize_equation(equation.lower())   # evaluate case-insensitively
             substituted_equation = []
-            # a3=sum(a1:a2)
             try:
                 i = 0
                 while i < len(tokens):
@@ -561,20 +584,28 @@ def APPLY_EQUATIONS():
                     i += 1
             except Exception:
                 invalid = True
-            if not failed_to_subsitute:
-                resolution = None
-                if not invalid:
-                    substituted_equation = ''.join(substituted_equation)
-                    try:
-                        resolution = eval(substituted_equation, {"__builtins__": {}}, math_functions)
-                    except Exception:
-                        resolution = None
-                equation_targets[target] = resolution
-                x, y = convert_cell_name_to_x_y(target)
-                set_cell(cells, x, y, resolution)
-            else:
+
+            if failed_to_subsitute:
                 current_unresolved_equations[target] = equation
+                continue
+
+            resolution = None
+            if not invalid:
+                try:
+                    resolution = eval(''.join(substituted_equation), {"__builtins__": {}}, math_functions)
+                except Exception:
+                    resolution = None
+            equation_targets[target] = resolution
+            x, y = convert_cell_name_to_x_y(target)
+            # show the text the user typed when the equation can't be evaluated
+            set_cell(cells, x, y, equation if resolution is None else resolution)
         unresolved_equations = current_unresolved_equations
+
+    # anything still unresolved (circular references, dependencies on broken cells) shows its text too
+    for target, equation in unresolved_equations.items():
+        x, y = convert_cell_name_to_x_y(target)
+        set_cell(cells, x, y, equation)
+
     # add missing cells
     for y in range(len(cells)):
         while len(cells[y]) < width:
@@ -750,7 +781,7 @@ def DISPLAY(show_equations=False):
 def get_current_contents(cell_name, x, y):
     global cells, equations
     if cell_name in equations:
-        return '=' + equations[cell_name]
+        return equations[cell_name]
     elif y < len(cells) and x < len(cells[y]):
         return str(cells[y][x])
     else:
@@ -1089,7 +1120,7 @@ HELP = [
     ('arrows', 'move'),
     ('shift+arrows', 'select a range'),
     ('esc', 'clear selection'),
-    ('=...', 'start an equation, e.g. =a1*2 or =sum(a0:a4)'),
+    ('a1*2, sum(a0:a4)', 'equations are detected automatically, bad ones show as text'),
     ('tab', 'commit and move right (while editing) / move right'),
     ('backspace / del', 'clear cell or selection'),
     (':c / :x / :v', 'copy / cut / paste the selection or current cell'),
@@ -1146,11 +1177,12 @@ def selection_range() -> tuple[str, str]:
 def commit_cell(x: int, y: int, text: str):
     WRITE_ACTION_FOR_UNDO()
     name = convert_x_to_alpha_value(x) + str(y)
-    if text.startswith('='):
-        equations[name] = text[1:].replace(' ', '').lower()
+    if is_equation(text.strip()):
+        equations[name] = text          # keep exactly what was typed
     else:
         equations.pop(name, None)
-        set_cell(cells, x, y, text)
+    # the cell holds the raw text until APPLY_EQUATIONS replaces it with a result
+    set_cell(cells, x, y, text)
 def edit_current(initial: str, arrows_commit: bool):
     x, y = convert_cell_name_to_x_y(current_cell)
     text, key = edit_line(mint_green(f"{current_cell}> "), len(current_cell) + 2,
