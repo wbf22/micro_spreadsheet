@@ -338,7 +338,8 @@ def set_cell(cells: list[list[str]], x: int, y: int, value):
         if int_resolution == value:
             value = int_resolution
         precision = get_float_precision(value)
-        precision = min(PRECISION, precision)
+        if abs(value) >= 1:
+            precision = min(PRECISION, precision)
         cells[y][x] = f"{value:.{precision}f}"
     else:
         cells[y][x] = value
